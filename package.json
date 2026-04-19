@@ -76,9 +76,7 @@
       "category": "public.app-category.utilities"
     },
     "dmg": {
-      "title": "ICGC FMT Scripture Display",
-      "background": "resources/dmg-background.png",
-      "window": { "width": 540, "height": 380 }
+      "title": "ICGC FMT Scripture Display"
     }
   }
 }
