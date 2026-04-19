@@ -1,0 +1,84 @@
+{
+  "name": "ICGC-FMT Church Scripture Display",
+  "version": "1.0.0",
+  "description": "Church scripture & lyrics display app",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "package": "electron-vite build && electron-builder",
+    "package:win": "electron-vite build && electron-builder --win",
+    "package:mac": "electron-vite build && electron-builder --mac",
+    "postinstall": "electron-rebuild -f -w better-sqlite3"
+  },
+  "dependencies": {
+    "@xenova/transformers": "^2.17.2",
+    "better-sqlite3": "^11.10.0"
+  },
+  "devDependencies": {
+    "@electron-toolkit/preload": "^3.0.0",
+    "@electron-toolkit/utils": "^3.0.0",
+    "@electron/rebuild": "^3.6.0",
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "postcss": "^8.4.38",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.4",
+    "typescript": "^5.5.2",
+    "vite": "^5.3.1"
+  },
+  "build": {
+    "appId": "com.icgcfmt.churchdisplay",
+    "productName": "ICGC FMT Scripture Display",
+    "copyright": "ICGC FMT",
+    "asar": true,
+    "asarUnpack": [
+      "**/better-sqlite3/**",
+      "**/*.wasm",
+      "**/onnxruntime*/**"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "resources"
+    },
+    "files": [
+      "out/**/*",
+      "node_modules/better-sqlite3/build/Release/*.node",
+      "!node_modules/better-sqlite3/build/Release/*.pdb",
+      "!node_modules/**/{test,tests,__tests__,spec,specs}/**",
+      "!node_modules/**/*.{md,txt,map}"
+    ],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "resources/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ICGC FMT Scripture Display",
+      "installerIcon": "resources/icon.ico",
+      "uninstallerIcon": "resources/icon.ico"
+    },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "icon": "resources/icon.icns",
+      "category": "public.app-category.utilities"
+    },
+    "dmg": {
+      "title": "ICGC FMT Scripture Display",
+      "background": "resources/dmg-background.png",
+      "window": { "width": 540, "height": 380 }
+    }
+  }
+}
