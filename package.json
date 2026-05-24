@@ -1,6 +1,6 @@
 {
   "name": "icgc-fmt-scripture-display",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Church scripture & lyrics display app",
   "main": "out/main/index.js",
   "scripts": {
