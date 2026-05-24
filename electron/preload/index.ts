@@ -46,7 +46,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // Media image display
   loadImageForDisplay: () => ipcRenderer.invoke('media:load-image'),
-  showImage: (src: string) => ipcRenderer.send('display:show-image', src),
+  showImage: (data: { src: string; caption?: string; fit?: 'contain' | 'cover' }) => ipcRenderer.send('display:show-image', data),
 
   // Theme
   setTheme: (theme: unknown) => ipcRenderer.send('display:set-theme', theme),

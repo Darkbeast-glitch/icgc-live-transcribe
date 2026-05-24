@@ -51,6 +51,7 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
   const wsRef = useRef<WebSocket | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
   const chunkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const seenRef = useRef<Set<string>>(new Set())
@@ -190,10 +191,12 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
     setErrorMsg('')
     let stream: MediaStream
     try { stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }) }
-    catch { setErrorMsg('Microphone access denied.'); return }
+    catch { setErrorMsg('Microphone access denied. Check system permissions.'); return }
     streamRef.current = stream
 
-    const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'].find((t) => MediaRecorder.isTypeSupported(t)) || ''
+    // Prefer PCM wav so AudioContext can always decode it; fall back to webm
+    const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus']
+      .find((t) => MediaRecorder.isTypeSupported(t)) || ''
     const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
     recorderRef.current = recorder
     audioChunksRef.current = []
@@ -201,11 +204,14 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) audioChunksRef.current.push(e.data)
     }
-    recorder.start(500)
+    recorder.start(250)
     setIsListening(true)
     setStatus('listening…')
 
-    // Process accumulated audio every 6 seconds
+    const WHISPER_SAMPLE_RATE = 16000
+    // Shared AudioContext — reuse instead of creating one per chunk
+    const audioCtx = new AudioContext()
+
     chunkIntervalRef.current = setInterval(async () => {
       const chunks = audioChunksRef.current.splice(0)
       if (chunks.length === 0) return
@@ -214,19 +220,44 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
       setIsProcessing(true)
       try {
         const arrayBuffer = await blob.arrayBuffer()
-        const audioCtx = new AudioContext()
-        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
-        audioCtx.close()
+        let decoded: AudioBuffer
+        try {
+          decoded = await audioCtx.decodeAudioData(arrayBuffer)
+        } catch (e) {
+          setErrorMsg(`Audio decode failed: ${String(e)}`)
+          setIsProcessing(false)
+          return
+        }
 
-        const float32 = audioBuffer.getChannelData(0)
-        const result = await window.api.whisperTranscribe(float32.buffer as ArrayBuffer, audioBuffer.sampleRate)
+        // Resample to 16kHz mono — Whisper's required input format
+        const numFrames = Math.ceil(decoded.duration * WHISPER_SAMPLE_RATE)
+        if (numFrames < 100) { setIsProcessing(false); return } // skip near-empty chunks
+        const offlineCtx = new OfflineAudioContext(1, numFrames, WHISPER_SAMPLE_RATE)
+        const src = offlineCtx.createBufferSource()
+        src.buffer = decoded
+        src.connect(offlineCtx.destination)
+        src.start(0)
+        const resampled = await offlineCtx.startRendering()
 
-        if (result.success && result.text && result.text.length > 1) {
+        // Copy channel data into its own ArrayBuffer to avoid offset/view issues
+        const channelData = resampled.getChannelData(0)
+        const float32 = new Float32Array(channelData)
+
+        const result = await window.api.whisperTranscribe(float32.buffer, WHISPER_SAMPLE_RATE)
+
+        if (!result.success) {
+          setErrorMsg(`Whisper error: ${result.error ?? 'unknown'}`)
+        } else if (result.text && result.text.trim().length > 1) {
+          setErrorMsg('')
           appendTranscript(result.text)
         }
-      } catch { /* decode errors ignored */ }
+      } catch (e) {
+        setErrorMsg(`Processing error: ${String(e)}`)
+      }
       setIsProcessing(false)
-    }, 6000)
+    }, 4000)
+
+    audioCtxRef.current = audioCtx
   }, [whisperReady, appendTranscript])
 
   // ── Shared stop ──────────────────────────────────────────────────────────
@@ -235,6 +266,7 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
     if (chunkIntervalRef.current) { clearInterval(chunkIntervalRef.current); chunkIntervalRef.current = null }
     recorderRef.current?.stop(); recorderRef.current = null
     streamRef.current?.getTracks().forEach((t) => t.stop()); streamRef.current = null
+    audioCtxRef.current?.close(); audioCtxRef.current = null
     if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); wsRef.current = null }
     setIsListening(false); setInterimText(''); setStatus(''); setIsProcessing(false)
     audioChunksRef.current = []
@@ -256,6 +288,7 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
     if (chunkIntervalRef.current) clearInterval(chunkIntervalRef.current)
     recorderRef.current?.stop()
     streamRef.current?.getTracks().forEach((t) => t.stop())
+    audioCtxRef.current?.close()
     if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close() }
   }, [])
 
@@ -352,7 +385,7 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
             </div>
           ) : (
             <div className="p-2 bg-[#1a1a1e] border border-[#333338] rounded-lg">
-              <p className="text-slate-500 text-xs mb-2">Whisper model not loaded (~150 MB)</p>
+              <p className="text-slate-500 text-xs mb-2">Whisper Base model not loaded (~145 MB)</p>
               <button
                 onClick={loadWhisperModel}
                 className="w-full py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium rounded transition-colors"
@@ -385,9 +418,18 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
 
       {/* Detected verses inline */}
       {detected.length > 0 && (
-        <div className="border-t border-[#252528] max-h-36 overflow-y-auto">
-          {detected.slice(0, 5).map((d) => (
-            <div key={d.id} className="flex items-center gap-2 px-3 py-1.5 border-b border-[#1e1e22] group">
+        <div className="border-t border-[#252528] max-h-36 overflow-y-auto shrink-0">
+          <div className="flex items-center justify-between px-3 py-1 border-b border-[#1e1e22]">
+            <span className="text-slate-500 text-[10px]">Detected ({detected.length})</span>
+            <button
+              onClick={() => { setDetected([]); seenRef.current.clear() }}
+              className="text-slate-600 hover:text-red-400 text-[10px] transition-colors"
+            >
+              Clear all
+            </button>
+          </div>
+          {detected.map((d) => (
+            <div key={d.id} className="flex items-center gap-2 px-3 py-1.5 border-b border-[#1e1e22]">
               <span className="w-1.5 h-1.5 bg-orange-500 rounded-full shrink-0" />
               <span className="text-white text-xs font-medium flex-1 truncate">{d.result.reference}</span>
               <button
@@ -399,9 +441,16 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
                   }
                   onPresent(item)
                 }}
-                className="opacity-0 group-hover:opacity-100 text-[10px] px-1.5 py-0.5 bg-orange-500 text-white rounded transition-opacity"
+                className="text-[10px] px-1.5 py-0.5 bg-orange-500 text-white rounded transition-colors hover:bg-orange-400"
               >
                 ▶
+              </button>
+              <button
+                onClick={() => setDetected((prev) => prev.filter((x) => x.id !== d.id))}
+                className="text-slate-600 hover:text-red-400 text-xs transition-colors"
+                title="Dismiss"
+              >
+                ✕
               </button>
             </div>
           ))}

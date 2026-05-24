@@ -40,7 +40,7 @@ interface Window {
 
     // Media image display
     loadImageForDisplay: () => Promise<{ dataUrl: string; name: string } | null>
-    showImage: (src: string) => void
+    showImage: (data: { src: string; caption?: string; fit?: 'contain' | 'cover' }) => void
 
     // Whisper offline ASR
     whisperStatus: () => Promise<{ ready: boolean; loading: boolean }>

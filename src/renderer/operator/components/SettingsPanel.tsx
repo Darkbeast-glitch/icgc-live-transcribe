@@ -149,6 +149,68 @@ export default function SettingsPanel({ theme, onThemeChange }: Props) {
         </p>
       </section>
 
+      {/* Text colours */}
+      <section className="mb-8">
+        <h3 className="text-slate-400 text-xs uppercase tracking-widest mb-3">Text Colors</h3>
+        <div className="flex flex-col gap-3">
+          {/* Verse text */}
+          <div className="flex items-center justify-between p-3 bg-slate-800/60 border border-slate-700 rounded-xl">
+            <div>
+              <p className="text-white text-sm">Verse text</p>
+              <p className="text-slate-500 text-xs mt-0.5">Main scripture body text</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-slate-400 text-xs font-mono">{theme.textColor}</span>
+              <label className="relative cursor-pointer">
+                <div
+                  className="w-9 h-9 rounded-lg border-2 border-slate-600 shadow-inner"
+                  style={{ backgroundColor: theme.textColor }}
+                />
+                <input
+                  type="color"
+                  value={theme.textColor}
+                  onChange={(e) => onThemeChange({ ...theme, textColor: e.target.value })}
+                  className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Reference text */}
+          <div className="flex items-center justify-between p-3 bg-slate-800/60 border border-slate-700 rounded-xl">
+            <div>
+              <p className="text-white text-sm">Reference text</p>
+              <p className="text-slate-500 text-xs mt-0.5">e.g. "John 3:16 — KJV"</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-slate-400 text-xs font-mono">{theme.refColor}</span>
+              <label className="relative cursor-pointer">
+                <div
+                  className="w-9 h-9 rounded-lg border-2 border-slate-600 shadow-inner"
+                  style={{ backgroundColor: theme.refColor.startsWith('rgba') ? theme.textColor : theme.refColor }}
+                />
+                <input
+                  type="color"
+                  value={theme.refColor.startsWith('rgba') ? theme.textColor : theme.refColor}
+                  onChange={(e) => onThemeChange({ ...theme, refColor: e.target.value })}
+                  className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                />
+              </label>
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              const preset = PRESET_THEMES.find((t) => t.id === theme.id) ?? PRESET_THEMES[0]
+              onThemeChange({ ...theme, textColor: preset.textColor, refColor: preset.refColor })
+            }}
+            className="text-xs text-slate-500 hover:text-slate-300 transition-colors text-left"
+          >
+            ↺ Reset to theme defaults
+          </button>
+        </div>
+      </section>
+
       {/* Preview hint */}
       <div className="p-4 bg-slate-800/60 border border-slate-700 rounded-xl mb-8">
         <p className="text-slate-400 text-sm">

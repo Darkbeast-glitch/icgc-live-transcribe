@@ -22,7 +22,7 @@ async function loadWhisper(sender?: WebContents): Promise<ASRPipeline> {
 
     asrPipeline = await pipeline(
       'automatic-speech-recognition',
-      'Xenova/whisper-tiny.en',
+      'Xenova/whisper-base.en',
       {
         progress_callback: (p: { status: string; progress?: number; file?: string }) => {
           if (sender && !sender.isDestroyed() && p.status === 'downloading') {

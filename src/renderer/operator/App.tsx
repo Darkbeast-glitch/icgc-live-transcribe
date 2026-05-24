@@ -12,7 +12,7 @@ import SettingsPanel from './components/SettingsPanel'
 import ManualSearch from './components/ManualSearch'
 import HistoryPanel from './components/HistoryPanel'
 import TimerPanel from './components/TimerPanel'
-import MediaPanel from './components/MediaPanel'
+import MediaPanel, { MediaItem } from './components/MediaPanel'
 
 type BottomTab = 'bible' | 'smart' | 'songs' | 'service' | 'history' | 'media'
 
@@ -47,6 +47,9 @@ export default function App() {
   // Queue + detections
   const [queue, setQueue] = useState<QueueItem[]>([])
   const [recentDetections, setRecentDetections] = useState<QueueItem[]>([])
+
+  // Media items — kept here so they survive tab switches
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
 
   // Pending preview item (for Take Live flow)
   const pendingPreviewRef = useRef<QueueItem | null>(null)
@@ -233,7 +236,7 @@ export default function App() {
               )}
               {bottomTab === 'songs' && (
                 <SongPanel onDisplay={(info) => {
-                  setNowShowing({ type: 'lyrics', lyrics: { title: info.label, lines: [] } })
+                  setNowShowing({ type: 'lyrics', lyrics: { title: info.label, lines: info.lines ?? [] } })
                 }} />
               )}
               {bottomTab === 'service' && (
@@ -246,9 +249,11 @@ export default function App() {
                 }} />
               )}
               {bottomTab === 'media' && (
-                <MediaPanel onDisplay={(display) => {
-                  setNowShowing(display)
-                }} />
+                <MediaPanel
+                  items={mediaItems}
+                  onItemsChange={setMediaItems}
+                  onDisplay={(display) => setNowShowing(display)}
+                />
               )}
               {bottomTab === 'history' && <HistoryPanel />}
             </div>

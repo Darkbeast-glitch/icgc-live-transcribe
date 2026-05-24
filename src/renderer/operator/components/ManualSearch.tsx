@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { BIBLE_BOOKS, VerseResult, NowShowingInfo } from '@shared/types'
 
 interface Props {
@@ -16,6 +16,89 @@ interface SemanticResult {
 }
 
 type SearchMode = 'reference' | 'smart'
+
+function BookAutocomplete({ value, onChange }: { value: string; onChange: (b: string) => void }) {
+  const [inputVal, setInputVal] = useState(value)
+  const [open, setOpen] = useState(false)
+  const [highlighted, setHighlighted] = useState(0)
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const suggestions = inputVal.trim()
+    ? BIBLE_BOOKS.filter((b) => b.toLowerCase().startsWith(inputVal.toLowerCase()))
+    : BIBLE_BOOKS
+
+  const select = (b: string) => {
+    setInputVal(b)
+    onChange(b)
+    setOpen(false)
+  }
+
+  const openDropdown = () => {
+    if (inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect()
+      setDropdownStyle({
+        position: 'fixed',
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+        zIndex: 9999,
+      })
+    }
+    setOpen(true)
+  }
+
+  const handleKey = (e: React.KeyboardEvent) => {
+    if (!open) { if (e.key === 'ArrowDown' || e.key === 'Enter') openDropdown(); return }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHighlighted((h) => Math.min(h + 1, suggestions.length - 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlighted((h) => Math.max(h - 1, 0)) }
+    else if (e.key === 'Enter') { e.preventDefault(); if (suggestions[highlighted]) select(suggestions[highlighted]) }
+    else if (e.key === 'Escape') setOpen(false)
+  }
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (inputRef.current && !inputRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  useEffect(() => { setInputVal(value) }, [value])
+
+  return (
+    <div className="relative w-full">
+      <input
+        ref={inputRef}
+        value={inputVal}
+        onChange={(e) => { setInputVal(e.target.value); setHighlighted(0); openDropdown() }}
+        onFocus={openDropdown}
+        onKeyDown={handleKey}
+        placeholder="e.g. John"
+        className="w-full bg-slate-700 border border-slate-600 text-white text-sm px-2 py-2 rounded focus:outline-none focus:border-indigo-500"
+      />
+      {open && suggestions.length > 0 && (
+        <ul
+          style={dropdownStyle}
+          className="bg-[#1e1e28] border border-slate-600 rounded-lg shadow-xl max-h-56 overflow-y-auto"
+        >
+          {suggestions.map((b, i) => (
+            <li
+              key={b}
+              onMouseDown={() => select(b)}
+              onMouseEnter={() => setHighlighted(i)}
+              className={`px-3 py-1.5 text-sm cursor-pointer transition-colors ${
+                i === highlighted ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              {b}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
 
 export default function ManualSearch({ translation, onDisplay }: Props) {
   const [mode, setMode] = useState<SearchMode>('reference')
@@ -148,7 +231,7 @@ export default function ManualSearch({ translation, onDisplay }: Props) {
 
       {/* ── Reference mode ── */}
       {mode === 'reference' && (
-        <div className="flex flex-col p-4 max-w-2xl mx-auto w-full overflow-y-auto">
+        <div className="flex flex-col p-4 max-w-2xl mx-auto w-full">
           <div className="flex gap-2 mb-4">
             <input
               value={rawInput}
@@ -165,21 +248,10 @@ export default function ManualSearch({ translation, onDisplay }: Props) {
             </button>
           </div>
 
-          <div className="flex items-center gap-2 mb-4 text-slate-500 text-xs">
-            <div className="flex-1 h-px bg-slate-700" />
-            <span>or select manually</span>
-            <div className="flex-1 h-px bg-slate-700" />
-          </div>
-
           <div className="grid grid-cols-4 gap-3 mb-4">
             <div className="col-span-2">
               <label className="text-slate-400 text-xs mb-1 block">Book</label>
-              <select
-                value={book} onChange={(e) => setBook(e.target.value)}
-                className="w-full bg-slate-700 border border-slate-600 text-white text-sm px-2 py-2 rounded focus:outline-none focus:border-indigo-500"
-              >
-                {BIBLE_BOOKS.map((b) => <option key={b} value={b}>{b}</option>)}
-              </select>
+              <BookAutocomplete value={book} onChange={setBook} />
             </div>
             <div>
               <label className="text-slate-400 text-xs mb-1 block">Chapter</label>

@@ -107,8 +107,8 @@ ipcMain.on('display:clear-timer', () => {
   projectorWindow?.webContents.send('display:clear-timer')
 })
 
-ipcMain.on('display:show-image', (_event, src: string) => {
-  projectorWindow?.webContents.send('display:show-image', { src })
+ipcMain.on('display:show-image', (_event, data: { src: string; caption?: string; fit?: 'contain' | 'cover' }) => {
+  projectorWindow?.webContents.send('display:show-image', data)
 })
 
 ipcMain.handle('media:load-image', async () => {

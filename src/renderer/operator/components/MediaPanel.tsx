@@ -1,41 +1,54 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { ActiveDisplay } from '@shared/types'
 
-interface Props {
-  onDisplay: (display: ActiveDisplay) => void
-}
-
-interface MediaItem {
+export interface MediaItem {
   id: string
   name: string
   src: string
 }
 
+interface Props {
+  items: MediaItem[]
+  onItemsChange: (items: MediaItem[]) => void
+  onDisplay: (display: ActiveDisplay) => void
+}
+
 function genId() { return `${Date.now()}-${Math.random().toString(36).slice(2, 6)}` }
 
-export default function MediaPanel({ onDisplay }: Props) {
-  const [items, setItems] = useState<MediaItem[]>([])
+export default function MediaPanel({ items, onItemsChange, onDisplay }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [caption, setCaption] = useState('')
+  const [fit, setFit] = useState<'contain' | 'cover'>('contain')
+  const activeItemRef = useRef<MediaItem | null>(null)
 
   const pickImage = useCallback(async () => {
     const result = await window.api.loadImageForDisplay()
     if (!result) return
     const item: MediaItem = { id: genId(), name: result.name, src: result.dataUrl }
-    setItems((prev) => [...prev, item])
-  }, [])
+    onItemsChange([...items, item])
+  }, [items, onItemsChange])
 
-  const displayItem = useCallback((item: MediaItem, cap?: string) => {
-    window.api.showImage(item.src)
+  const displayItem = useCallback((item: MediaItem, cap?: string, fitMode?: 'contain' | 'cover') => {
+    const resolvedFit = fitMode ?? fit
+    window.api.showImage({ src: item.src, caption: cap ?? '', fit: resolvedFit })
     setActiveId(item.id)
-    const display: ActiveDisplay = { type: 'image', image: { src: item.src, caption: cap ?? '' } }
-    onDisplay(display)
-  }, [onDisplay])
+    activeItemRef.current = item
+    onDisplay({ type: 'image', image: { src: item.src, caption: cap ?? '', fit: resolvedFit } })
+  }, [onDisplay, fit])
+
+  const switchFit = useCallback((newFit: 'contain' | 'cover') => {
+    setFit(newFit)
+    if (activeItemRef.current) {
+      const item = activeItemRef.current
+      window.api.showImage({ src: item.src, caption, fit: newFit })
+      onDisplay({ type: 'image', image: { src: item.src, caption, fit: newFit } })
+    }
+  }, [caption, onDisplay])
 
   const removeItem = useCallback((id: string) => {
-    setItems((prev) => prev.filter((i) => i.id !== id))
+    onItemsChange(items.filter((i) => i.id !== id))
     if (activeId === id) setActiveId(null)
-  }, [activeId])
+  }, [items, activeId, onItemsChange])
 
   return (
     <div className="flex flex-col h-full">
@@ -48,6 +61,27 @@ export default function MediaPanel({ onDisplay }: Props) {
           <span>+</span> Add Image
         </button>
         <div className="flex-1" />
+        {/* Fit toggle */}
+        <div className="flex items-center gap-1 bg-[#1a1a1e] border border-[#333338] rounded-lg p-0.5">
+          <button
+            onClick={() => switchFit('contain')}
+            title="Fit — show full image with borders"
+            className={`px-2.5 py-1 text-[10px] font-medium rounded transition-colors ${
+              fit === 'contain' ? 'bg-orange-500 text-white' : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            Fit
+          </button>
+          <button
+            onClick={() => switchFit('cover')}
+            title="Fill — stretch image to cover full screen"
+            className={`px-2.5 py-1 text-[10px] font-medium rounded transition-colors ${
+              fit === 'cover' ? 'bg-orange-500 text-white' : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            Fill
+          </button>
+        </div>
         <span className="text-slate-600 text-xs">{items.length} image{items.length !== 1 ? 's' : ''}</span>
       </div>
 
@@ -118,7 +152,7 @@ export default function MediaPanel({ onDisplay }: Props) {
                   {/* Hover actions */}
                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-2">
                     <button
-                      onClick={() => displayItem(item, caption)}
+                      onClick={() => displayItem(item, caption, fit)}
                       className="w-full py-1 bg-orange-500 hover:bg-orange-400 text-white text-[10px] font-semibold rounded-lg transition-colors"
                     >
                       ▶ Display

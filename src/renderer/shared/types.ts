@@ -36,13 +36,14 @@ export interface NowShowingInfo {
   type: 'verse' | 'lyrics'
   label: string
   translation?: string
+  lines?: string[]
 }
 
 export interface ActiveDisplay {
   type: 'verse' | 'lyrics' | 'image' | 'blank'
   verse?: { text: string; reference: string; translation: string; book?: string; chapter?: number; verseNum?: number }
   lyrics?: { title: string; lines: string[] }
-  image?: { src: string; caption?: string }
+  image?: { src: string; caption?: string; fit?: 'contain' | 'cover' }
 }
 
 export interface QueueItem {

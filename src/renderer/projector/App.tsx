@@ -6,7 +6,7 @@ interface SlotContent {
   mode: Exclude<DisplayMode, 'timer' | 'blank'> | 'image'
   verse?: DisplayVerse
   lyrics?: DisplayLyrics
-  image?: { src: string; caption?: string }
+  image?: { src: string; caption?: string; fit?: 'contain' | 'cover' }
 }
 
 const BLANK_SLOT: SlotContent = { mode: 'verse' } // placeholder, never rendered when mode=blank
@@ -116,17 +116,19 @@ export default function ProjectorApp() {
                 pointerEvents: 'none',
               }}
             >
-              <div className="relative z-10 w-full max-w-5xl px-16">
-                {content.mode === 'verse' && content.verse && (
-                  <VerseDisplay verse={content.verse} theme={theme} verseFontSize={sizes.verse} />
-                )}
-                {content.mode === 'lyrics' && content.lyrics && (
-                  <LyricsDisplay lyrics={content.lyrics} theme={theme} lyricsFontSize={sizes.lyrics} />
-                )}
-                {content.mode === 'image' && content.image && (
-                  <ImageDisplay image={content.image} />
-                )}
-              </div>
+              {/* Image in cover mode breaks out of the padded container */}
+              {content.mode === 'image' && content.image ? (
+                <ImageDisplay image={content.image} />
+              ) : (
+                <div className="relative z-10 w-full max-w-5xl px-16">
+                  {content.mode === 'verse' && content.verse && (
+                    <VerseDisplay verse={content.verse} theme={theme} verseFontSize={sizes.verse} />
+                  )}
+                  {content.mode === 'lyrics' && content.lyrics && (
+                    <LyricsDisplay lyrics={content.lyrics} theme={theme} lyricsFontSize={sizes.lyrics} />
+                  )}
+                </div>
+              )}
             </div>
           )
         })}
@@ -218,19 +220,24 @@ function VerseDisplay({
   )
 }
 
-function ImageDisplay({ image }: { image: { src: string; caption?: string } }) {
+function ImageDisplay({ image }: { image: { src: string; caption?: string; fit?: 'contain' | 'cover' } }) {
+  const isCover = image.fit === 'cover'
   return (
-    <div className="flex flex-col items-center justify-center gap-6">
+    <div className="absolute inset-0 flex items-center justify-center">
       <img
         src={image.src}
         alt={image.caption ?? ''}
-        className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-2xl"
-        style={{ filter: 'drop-shadow(0 0 40px rgba(0,0,0,0.8))' }}
+        className="absolute inset-0 w-full h-full"
+        style={{ objectFit: isCover ? 'cover' : 'contain' }}
       />
       {image.caption && (
         <p
-          className="text-center tracking-widest uppercase"
-          style={{ fontSize: 'clamp(0.9rem, 2vw, 1.4rem)', color: 'rgba(255,255,255,0.7)' }}
+          className="absolute bottom-8 left-0 right-0 text-center tracking-widest uppercase z-10"
+          style={{
+            fontSize: 'clamp(0.9rem, 2vw, 1.4rem)',
+            color: 'rgba(255,255,255,0.9)',
+            textShadow: '0 2px 8px rgba(0,0,0,0.8)',
+          }}
         >
           {image.caption}
         </p>
