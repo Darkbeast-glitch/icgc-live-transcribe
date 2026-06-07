@@ -23,6 +23,32 @@ const STORAGE_KEY = 'deepgram_api_key'
 const MODE_KEY = 'transcript_mode'
 const DEVICE_KEY = 'transcript_audio_device'
 
+// Church-specific vocabulary boosted via Deepgram's `keyterm` prompting (Nova-3 only —
+// the older `keywords` param is not supported on Nova-3). Add names, acronyms, and
+// recurring terms specific to your church so they're recognized accurately over
+// background noise (singing, instruments, crowd murmur). Keep the combined list
+// under ~500 tokens.
+const CHURCH_KEYTERMS = [
+  'ICGC', 'FMT', 'hallelujah', 'amen', 'communion', 'benediction',
+  'tithe', 'offering', 'altar', 'sanctuary', 'congregation', 'fellowship',
+]
+
+function buildDeepgramUrl(): string {
+  const params = new URLSearchParams({
+    model: 'nova-3',                 // Best current model — strongest in noisy/reverberant rooms and varied speaking styles
+    language: 'en',
+    smart_format: 'true',            // Auto-formats numbers, dates, scripture references (e.g. "John 3:16"), acronyms
+    punctuate: 'true',               // Adds punctuation/capitalization for readable captions on the projection screen
+    numerals: 'true',                // Renders spoken numbers as digits — helpful for verse/chapter numbers
+    interim_results: 'true',         // Streams partial text immediately so captions feel live, not laggy
+    endpointing: '300',              // 300ms of silence finalizes a phrase — short enough to feel instant, long enough to not chop mid-sentence
+    utterance_end_ms: '1500',        // 1.5s gap before declaring "utterance ended" — gives a pastor's dramatic pause room without the caption stalling
+    vad_events: 'true',              // Emits speech-start/end events — useful if you want to show a "listening…" indicator during silence
+  })
+  for (const term of CHURCH_KEYTERMS) params.append('keyterm', term)
+  return `wss://api.deepgram.com/v1/listen?${params.toString()}`
+}
+
 function genId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
 }
@@ -174,10 +200,7 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
     streamRef.current = stream
     loadAudioDevices()
 
-    const ws = new WebSocket(
-      'wss://api.deepgram.com/v1/listen?model=nova-2&language=en&smart_format=true&interim_results=true&punctuate=true&utterance_end_ms=1000',
-      ['token', apiKey]
-    )
+    const ws = new WebSocket(buildDeepgramUrl(), ['token', apiKey])
     wsRef.current = ws
 
     ws.onopen = () => {
@@ -356,7 +379,7 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
       </div>
 
       {/* Audio input device picker */}
-      <div className="px-3 pt-2 shrink-0">
+      <div className="relative px-3 pt-2 shrink-0">
         <button
           onClick={() => setShowDevicePicker((v) => !v)}
           className="w-full flex items-center justify-between text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
@@ -369,7 +392,7 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
           <span>{showDevicePicker ? '▲' : '▼'}</span>
         </button>
         {showDevicePicker && (
-          <div className="mt-1.5 p-2 bg-[#1a1a1e] border border-[#333338] rounded-lg space-y-1">
+          <div className="absolute left-3 right-3 top-full mt-1.5 z-30 max-h-64 overflow-y-auto p-2 bg-[#1a1a1e] border border-[#333338] rounded-lg shadow-2xl space-y-1">
             <p className="text-slate-600 text-[10px] mb-1">
               Pick a virtual audio cable fed from vMix to transcribe its program audio instead of the room mic.
             </p>
