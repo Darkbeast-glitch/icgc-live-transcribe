@@ -42,12 +42,15 @@ interface Window {
     loadImageForDisplay: () => Promise<{ dataUrl: string; name: string } | null>
     showImage: (data: { src: string; caption?: string; fit?: 'contain' | 'cover' }) => void
 
+    // Manual notes display
+    showNote: (data: { heading?: string; html: string }) => void
+
     // Whisper offline ASR
     whisperStatus: () => Promise<{ ready: boolean; loading: boolean }>
     whisperLoadModel: () => Promise<{ success: boolean; error?: string }>
     whisperTranscribe: (audioBuffer: ArrayBuffer, sampleRate: number) => Promise<{ success: boolean; text?: string; error?: string }>
-    onWhisperProgress: (cb: (data: { file: string; progress: number }) => void) => void
-    onWhisperReady: (cb: () => void) => void
+    onWhisperProgress: (cb: (data: { file: string; progress: number }) => void) => () => void
+    onWhisperReady: (cb: () => void) => () => void
 
     // Chapter fetch
     getChapter: (params: { book: string; chapter: number; translation: string }) => Promise<{
@@ -57,7 +60,7 @@ interface Window {
     // Offline Bible download
     getBibleDownloadStatus: () => Promise<{ downloaded: number; total: number; inProgress: boolean }>
     startBibleDownload: () => Promise<void>
-    onBibleDownloadProgress: (cb: (data: { done: number; total: number; complete?: boolean }) => void) => void
+    onBibleDownloadProgress: (cb: (data: { done: number; total: number; complete?: boolean }) => void) => () => void
 
     // Semantic search
     getSemanticStatus: () => Promise<{ indexed: number; cached: number; isIndexing: boolean; modelReady: boolean; modelLoading: boolean }>
@@ -68,9 +71,9 @@ interface Window {
       empty?: boolean
       error?: string
     }>
-    onSemanticModelProgress: (cb: (data: { file: string; progress: number }) => void) => void
-    onSemanticModelReady: (cb: () => void) => void
-    onSemanticIndexingProgress: (cb: (data: { done: number; total: number; complete?: boolean }) => void) => void
+    onSemanticModelProgress: (cb: (data: { file: string; progress: number }) => void) => () => void
+    onSemanticModelReady: (cb: () => void) => () => void
+    onSemanticIndexingProgress: (cb: (data: { done: number; total: number; complete?: boolean }) => void) => () => void
   }
 
   projector: {
@@ -81,5 +84,6 @@ interface Window {
     onShowTimer: (callback: (data: DisplayTimer) => void) => void
     onClearTimer: (callback: () => void) => void
     onShowImage: (callback: (data: { src: string; caption?: string }) => void) => void
+    onShowNote: (callback: (data: { heading?: string; html: string }) => void) => void
   }
 }

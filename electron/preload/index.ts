@@ -48,6 +48,9 @@ contextBridge.exposeInMainWorld('api', {
   loadImageForDisplay: () => ipcRenderer.invoke('media:load-image'),
   showImage: (data: { src: string; caption?: string; fit?: 'contain' | 'cover' }) => ipcRenderer.send('display:show-image', data),
 
+  // Manual notes display
+  showNote: (data: { heading?: string; html: string }) => ipcRenderer.send('display:show-note', data),
+
   // Theme
   setTheme: (theme: unknown) => ipcRenderer.send('display:set-theme', theme),
 
@@ -60,28 +63,48 @@ contextBridge.exposeInMainWorld('api', {
   startBibleDownload: () => ipcRenderer.invoke('bible:start-download'),
   onBibleDownloadProgress: (
     cb: (data: { done: number; total: number; complete?: boolean }) => void
-  ) => ipcRenderer.on('bible:download-progress', (_e, data) => cb(data)),
+  ) => {
+    const handler = (_e: unknown, data: { done: number; total: number; complete?: boolean }) => cb(data)
+    ipcRenderer.on('bible:download-progress', handler)
+    return () => ipcRenderer.removeListener('bible:download-progress', handler)
+  },
 
   // Semantic search
   getSemanticStatus: () => ipcRenderer.invoke('semantic:status'),
   loadSemanticModel: () => ipcRenderer.invoke('semantic:load-model'),
   startSemanticIndexing: () => ipcRenderer.invoke('semantic:start-indexing'),
   semanticSearch: (query: string) => ipcRenderer.invoke('semantic:search', query),
-  onSemanticModelProgress: (cb: (data: { file: string; progress: number }) => void) =>
-    ipcRenderer.on('semantic:model-progress', (_e, data) => cb(data)),
-  onSemanticModelReady: (cb: () => void) =>
-    ipcRenderer.on('semantic:model-ready', () => cb()),
+  onSemanticModelProgress: (cb: (data: { file: string; progress: number }) => void) => {
+    const handler = (_e: unknown, data: { file: string; progress: number }) => cb(data)
+    ipcRenderer.on('semantic:model-progress', handler)
+    return () => ipcRenderer.removeListener('semantic:model-progress', handler)
+  },
+  onSemanticModelReady: (cb: () => void) => {
+    const handler = () => cb()
+    ipcRenderer.on('semantic:model-ready', handler)
+    return () => ipcRenderer.removeListener('semantic:model-ready', handler)
+  },
   onSemanticIndexingProgress: (
     cb: (data: { done: number; total: number; complete?: boolean }) => void
-  ) => ipcRenderer.on('semantic:indexing-progress', (_e, data) => cb(data)),
+  ) => {
+    const handler = (_e: unknown, data: { done: number; total: number; complete?: boolean }) => cb(data)
+    ipcRenderer.on('semantic:indexing-progress', handler)
+    return () => ipcRenderer.removeListener('semantic:indexing-progress', handler)
+  },
 
   // Whisper offline ASR
   whisperStatus: () => ipcRenderer.invoke('whisper:status'),
   whisperLoadModel: () => ipcRenderer.invoke('whisper:load-model'),
   whisperTranscribe: (audioBuffer: ArrayBuffer, sampleRate: number) =>
     ipcRenderer.invoke('whisper:transcribe', audioBuffer, sampleRate),
-  onWhisperProgress: (cb: (data: { file: string; progress: number }) => void) =>
-    ipcRenderer.on('whisper:progress', (_e, data) => cb(data)),
-  onWhisperReady: (cb: () => void) =>
-    ipcRenderer.on('whisper:ready', () => cb())
+  onWhisperProgress: (cb: (data: { file: string; progress: number }) => void) => {
+    const handler = (_e: unknown, data: { file: string; progress: number }) => cb(data)
+    ipcRenderer.on('whisper:progress', handler)
+    return () => ipcRenderer.removeListener('whisper:progress', handler)
+  },
+  onWhisperReady: (cb: () => void) => {
+    const handler = () => cb()
+    ipcRenderer.on('whisper:ready', handler)
+    return () => ipcRenderer.removeListener('whisper:ready', handler)
+  }
 })

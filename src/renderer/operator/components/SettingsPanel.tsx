@@ -27,16 +27,17 @@ export default function SettingsPanel({ theme, onThemeChange }: Props) {
 
   useEffect(() => {
     window.api.getBibleDownloadStatus().then(setDlStatus)
-    window.api.onBibleDownloadProgress((data) => {
+    window.api.getSemanticStatus().then(setSemStatus)
+
+    const offBibleProgress = window.api.onBibleDownloadProgress((data) => {
       setDlStatus({ downloaded: data.done, total: data.total, inProgress: !data.complete })
     })
-    window.api.getSemanticStatus().then(setSemStatus)
-    window.api.onSemanticModelProgress((data) => setModelProgress(data))
-    window.api.onSemanticModelReady(() => {
+    const offModelProgress = window.api.onSemanticModelProgress((data) => setModelProgress(data))
+    const offModelReady = window.api.onSemanticModelReady(() => {
       setModelProgress(null)
       window.api.getSemanticStatus().then(setSemStatus)
     })
-    window.api.onSemanticIndexingProgress((data) => {
+    const offIndexProgress = window.api.onSemanticIndexingProgress((data) => {
       if (data.complete) {
         window.api.getSemanticStatus().then(setSemStatus)
       } else {
@@ -45,6 +46,13 @@ export default function SettingsPanel({ theme, onThemeChange }: Props) {
         )
       }
     })
+
+    return () => {
+      offBibleProgress()
+      offModelProgress()
+      offModelReady()
+      offIndexProgress()
+    }
   }, [])
 
   const startDownload = async () => {
@@ -129,7 +137,7 @@ export default function SettingsPanel({ theme, onThemeChange }: Props) {
       {/* Font size */}
       <section className="mb-8">
         <h3 className="text-slate-400 text-xs uppercase tracking-widest mb-3">Text Size</h3>
-        <div className="flex gap-2">
+        <div className="flex gap-2 mb-4">
           {(Object.keys(FONT_SIZES) as FontSizeKey[]).map((size) => (
             <button
               key={size}
@@ -144,7 +152,80 @@ export default function SettingsPanel({ theme, onThemeChange }: Props) {
             </button>
           ))}
         </div>
-        <p className="text-slate-600 text-xs mt-2">
+
+        {/* Custom size slider */}
+        <div className="space-y-4">
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-slate-400 text-xs">Custom size</label>
+              <div className="flex items-center gap-2">
+                <span className="text-white text-xs font-mono w-12 text-right">
+                  {theme.customFontSize != null ? `${theme.customFontSize.toFixed(1)}rem` : 'auto'}
+                </span>
+                {theme.customFontSize != null && (
+                  <button
+                    onClick={() => onThemeChange({ ...theme, customFontSize: undefined })}
+                    className="text-slate-500 hover:text-slate-300 text-xs transition-colors"
+                    title="Reset to preset"
+                  >
+                    ↺
+                  </button>
+                )}
+              </div>
+            </div>
+            <input
+              type="range"
+              min="1.0"
+              max="7.0"
+              step="0.1"
+              value={theme.customFontSize ?? 2.8}
+              onChange={(e) => onThemeChange({ ...theme, customFontSize: parseFloat(e.target.value) })}
+              className="w-full h-2 rounded-full appearance-none cursor-pointer accent-indigo-500"
+              style={{ background: `linear-gradient(to right, #6366f1 0%, #6366f1 ${((( theme.customFontSize ?? 2.8) - 1) / 6) * 100}%, #334155 ${(((theme.customFontSize ?? 2.8) - 1) / 6) * 100}%, #334155 100%)` }}
+            />
+            <div className="flex justify-between text-slate-600 text-xs mt-0.5">
+              <span>1 rem</span>
+              <span>7 rem</span>
+            </div>
+          </div>
+
+          {/* Letter spacing slider */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-slate-400 text-xs">Letter spacing</label>
+              <div className="flex items-center gap-2">
+                <span className="text-white text-xs font-mono w-16 text-right">
+                  {theme.letterSpacing != null ? `${theme.letterSpacing.toFixed(2)}em` : 'default'}
+                </span>
+                {theme.letterSpacing != null && (
+                  <button
+                    onClick={() => onThemeChange({ ...theme, letterSpacing: undefined })}
+                    className="text-slate-500 hover:text-slate-300 text-xs transition-colors"
+                    title="Reset"
+                  >
+                    ↺
+                  </button>
+                )}
+              </div>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="0.30"
+              step="0.01"
+              value={theme.letterSpacing ?? 0}
+              onChange={(e) => onThemeChange({ ...theme, letterSpacing: parseFloat(e.target.value) })}
+              className="w-full h-2 rounded-full appearance-none cursor-pointer accent-indigo-500"
+              style={{ background: `linear-gradient(to right, #6366f1 0%, #6366f1 ${((theme.letterSpacing ?? 0) / 0.3) * 100}%, #334155 ${((theme.letterSpacing ?? 0) / 0.3) * 100}%, #334155 100%)` }}
+            />
+            <div className="flex justify-between text-slate-600 text-xs mt-0.5">
+              <span>tight</span>
+              <span>wide</span>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-slate-600 text-xs mt-3">
           Changes apply live to the projector window.
         </p>
       </section>

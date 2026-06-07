@@ -1,4 +1,5 @@
 import { ActiveDisplay } from '@shared/types'
+import { noteHtmlToPlainText } from '@shared/sanitizeNoteHtml'
 import { ProjectorTheme } from '@shared/themes'
 
 interface Props {
@@ -53,6 +54,23 @@ function MiniScreen({ display, theme }: { display: ActiveDisplay; theme: Project
             <p className="mt-2 text-[0.5rem] tracking-widest uppercase" style={{ color: theme.refColor }}>
               {display.lyrics.title}
             </p>
+          </>
+        )}
+        {display.type === 'note' && display.note && (
+          <>
+            {display.note.heading && (
+              <p
+                className="text-[0.5rem] tracking-widest uppercase font-semibold mb-1"
+                style={{ color: theme.refColor }}
+              >
+                {display.note.heading}
+              </p>
+            )}
+            {noteHtmlToPlainText(display.note.html).split('\n').slice(0, 4).map((line, i) => (
+              <p key={i} className="font-light line-clamp-1" style={{ color: theme.textColor, fontSize: '0.55rem' }}>
+                {line || ' '}
+              </p>
+            ))}
           </>
         )}
         {display.type === 'blank' && (

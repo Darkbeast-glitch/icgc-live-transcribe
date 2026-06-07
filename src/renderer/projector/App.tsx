@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { DisplayVerse, DisplayLyrics, DisplayMode, DisplayTimer } from '@shared/types'
 import { ProjectorTheme, FONT_SIZES, FontSizeKey, buildTheme } from '@shared/themes'
+import { sanitizeNoteHtml } from '@shared/sanitizeNoteHtml'
 
 interface SlotContent {
-  mode: Exclude<DisplayMode, 'timer' | 'blank'> | 'image'
+  mode: Exclude<DisplayMode, 'timer' | 'blank'> | 'image' | 'note'
   verse?: DisplayVerse
   lyrics?: DisplayLyrics
   image?: { src: string; caption?: string; fit?: 'contain' | 'cover' }
+  note?: { heading?: string; html: string }
 }
 
 const BLANK_SLOT: SlotContent = { mode: 'verse' } // placeholder, never rendered when mode=blank
@@ -16,13 +18,13 @@ export default function ProjectorApp() {
   const [slotA, setSlotA] = useState<SlotContent>(BLANK_SLOT)
   const [slotB, setSlotB] = useState<SlotContent>(BLANK_SLOT)
   const [active, setActive] = useState<'A' | 'B'>('A')
-  const [contentMode, setContentMode] = useState<'verse' | 'lyrics' | 'image' | 'blank'>('blank')
+  const [contentMode, setContentMode] = useState<'verse' | 'lyrics' | 'image' | 'note' | 'blank'>('blank')
   const [timer, setTimer] = useState<DisplayTimer | null>(null)
 
   const activeRef = useRef<'A' | 'B'>('A')
   activeRef.current = active
 
-  const showContent = (content: SlotContent, mode: 'verse' | 'lyrics' | 'image') => {
+  const showContent = (content: SlotContent, mode: 'verse' | 'lyrics' | 'image' | 'note') => {
     setContentMode(mode)
     if (activeRef.current === 'A') {
       setSlotB(content)
@@ -65,9 +67,18 @@ export default function ProjectorApp() {
       setTimer(null)
       showContent({ mode: 'image', image: data }, 'image')
     })
+
+    window.projector.onShowNote((data) => {
+      setTimer(null)
+      showContent({ mode: 'note', note: data }, 'note')
+    })
   }, [])
 
-  const sizes = FONT_SIZES[theme.fontSize as FontSizeKey] ?? FONT_SIZES.md
+  const baseSize = FONT_SIZES[theme.fontSize as FontSizeKey] ?? FONT_SIZES.md
+  const sizes = {
+    verse: theme.customFontSize != null ? `${theme.customFontSize}rem` : baseSize.verse,
+    lyrics: theme.customFontSize != null ? `${theme.customFontSize}rem` : baseSize.lyrics,
+  }
   const showContent_ = timer !== null || contentMode !== 'blank'
 
   return (
@@ -127,6 +138,9 @@ export default function ProjectorApp() {
                   {content.mode === 'lyrics' && content.lyrics && (
                     <LyricsDisplay lyrics={content.lyrics} theme={theme} lyricsFontSize={sizes.lyrics} />
                   )}
+                  {content.mode === 'note' && content.note && (
+                    <NoteDisplay note={content.note} theme={theme} fontSize={sizes.verse} />
+                  )}
                 </div>
               )}
             </div>
@@ -183,6 +197,34 @@ function TimerDisplay({ timer, theme }: { timer: DisplayTimer; theme: ProjectorT
   )
 }
 
+function NoteDisplay({
+  note,
+  theme,
+  fontSize,
+}: {
+  note: { heading?: string; html: string }
+  theme: ProjectorTheme
+  fontSize: string
+}) {
+  return (
+    <div className="text-center">
+      {note.heading && (
+        <p
+          className="font-semibold tracking-widest uppercase mb-6"
+          style={{ fontSize: 'clamp(1rem, 2.5vw, 1.6rem)', color: theme.refColor }}
+        >
+          {note.heading}
+        </p>
+      )}
+      <div
+        className="font-light leading-relaxed"
+        style={{ fontSize, lineHeight: 1.5, color: theme.textColor, letterSpacing: theme.letterSpacing != null ? `${theme.letterSpacing}em` : undefined }}
+        dangerouslySetInnerHTML={{ __html: sanitizeNoteHtml(note.html) }}
+      />
+    </div>
+  )
+}
+
 function VerseDisplay({
   verse,
   theme,
@@ -196,7 +238,7 @@ function VerseDisplay({
     <div className="text-center">
       <p
         className="font-light leading-relaxed"
-        style={{ fontSize: verseFontSize, lineHeight: 1.55, color: theme.textColor }}
+        style={{ fontSize: verseFontSize, lineHeight: 1.55, color: theme.textColor, letterSpacing: theme.letterSpacing != null ? `${theme.letterSpacing}em` : undefined }}
       >
         {verse.text}
       </p>
@@ -262,7 +304,7 @@ function LyricsDisplay({
         <p
           key={i}
           className="font-light leading-loose"
-          style={{ fontSize: lyricsFontSize, color: theme.textColor }}
+          style={{ fontSize: lyricsFontSize, color: theme.textColor, letterSpacing: theme.letterSpacing != null ? `${theme.letterSpacing}em` : undefined }}
         >
           {line || '\u00A0'}
         </p>

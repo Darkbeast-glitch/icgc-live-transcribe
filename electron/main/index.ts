@@ -9,6 +9,11 @@ import { setupExportHandlers } from './handlers/export'
 import { setupSemanticHandlers } from './handlers/semantic'
 import { setupWhisperHandlers } from './handlers/whisper'
 
+// Window-capture tools (vMix, OBS, NDI Tools) often show a black/frozen image for
+// GPU-compositied Electron windows. Disabling hardware acceleration makes the
+// projector window render in a way BitBlt-based capture can read correctly.
+app.disableHardwareAcceleration()
+
 let operatorWindow: BrowserWindow | null = null
 let projectorWindow: BrowserWindow | null = null
 
@@ -109,6 +114,10 @@ ipcMain.on('display:clear-timer', () => {
 
 ipcMain.on('display:show-image', (_event, data: { src: string; caption?: string; fit?: 'contain' | 'cover' }) => {
   projectorWindow?.webContents.send('display:show-image', data)
+})
+
+ipcMain.on('display:show-note', (_event, data: { heading?: string; html: string }) => {
+  projectorWindow?.webContents.send('display:show-note', data)
 })
 
 ipcMain.handle('media:load-image', async () => {

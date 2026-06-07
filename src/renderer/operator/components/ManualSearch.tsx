@@ -122,15 +122,20 @@ export default function ManualSearch({ translation, onDisplay }: Props) {
   } | null>(null)
 
   useEffect(() => {
-    if (mode === 'smart') {
+    if (mode !== 'smart') return
+
+    window.api.getSemanticStatus().then(setSmartStatus)
+    const offModelReady = window.api.onSemanticModelReady(() => {
       window.api.getSemanticStatus().then(setSmartStatus)
-      window.api.onSemanticModelReady(() => {
-        window.api.getSemanticStatus().then(setSmartStatus)
-      })
-      window.api.onSemanticIndexingProgress((data) => {
-        if (data.complete) window.api.getSemanticStatus().then(setSmartStatus)
-        else setSmartStatus((prev) => prev ? { ...prev, indexed: data.done } : prev)
-      })
+    })
+    const offIndexProgress = window.api.onSemanticIndexingProgress((data) => {
+      if (data.complete) window.api.getSemanticStatus().then(setSmartStatus)
+      else setSmartStatus((prev) => prev ? { ...prev, indexed: data.done } : prev)
+    })
+
+    return () => {
+      offModelReady()
+      offIndexProgress()
     }
   }, [mode])
 
@@ -231,6 +236,7 @@ export default function ManualSearch({ translation, onDisplay }: Props) {
 
       {/* ── Reference mode ── */}
       {mode === 'reference' && (
+        <div className="flex-1 overflow-y-auto">
         <div className="flex flex-col p-4 max-w-2xl mx-auto w-full">
           <div className="flex gap-2 mb-4">
             <input
@@ -293,11 +299,12 @@ export default function ManualSearch({ translation, onDisplay }: Props) {
                 </div>
               ) : (
                 <div className="p-3 bg-red-900/40 border border-red-700 rounded text-red-300 text-sm">
-                  {result.error || 'Verse not found.'}
+                  {(result.error ?? 'Verse not found.').replace(/^Error:\s*/i, '')}
                 </div>
               )}
             </div>
           )}
+        </div>
         </div>
       )}
 

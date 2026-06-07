@@ -40,10 +40,11 @@ export interface NowShowingInfo {
 }
 
 export interface ActiveDisplay {
-  type: 'verse' | 'lyrics' | 'image' | 'blank'
+  type: 'verse' | 'lyrics' | 'image' | 'note' | 'blank'
   verse?: { text: string; reference: string; translation: string; book?: string; chapter?: number; verseNum?: number }
   lyrics?: { title: string; lines: string[] }
   image?: { src: string; caption?: string; fit?: 'contain' | 'cover' }
+  note?: { heading?: string; html: string }
 }
 
 export interface QueueItem {
@@ -65,11 +66,12 @@ export interface DetectedScripture {
   raw: string
 }
 
-// Only translations supported by bible-api.com (free, no API key required)
-export const TRANSLATIONS = ['KJV', 'WEB', 'ASV', 'NASB', 'BBE', 'YLT', 'DARBY']
+// Translations supported via bible-api.com (free, no key) plus ESV (via api.esv.org with a personal API key)
+export const TRANSLATIONS = ['KJV', 'ESV', 'WEB', 'ASV', 'NASB', 'BBE', 'YLT', 'DARBY']
 
 export const TRANSLATION_LABELS: Record<string, string> = {
   KJV: 'KJV – King James Version',
+  ESV: 'ESV – English Standard Version',
   WEB: 'WEB – World English Bible',
   ASV: 'ASV – American Standard',
   NASB: 'NASB – New American Standard',

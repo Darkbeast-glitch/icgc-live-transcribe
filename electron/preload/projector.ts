@@ -21,5 +21,8 @@ contextBridge.exposeInMainWorld('projector', {
     ipcRenderer.on('display:clear-timer', () => callback()),
 
   onShowImage: (callback: (data: { src: string; caption?: string }) => void) =>
-    ipcRenderer.on('display:show-image', (_event, data) => callback(data))
+    ipcRenderer.on('display:show-image', (_event, data) => callback(data)),
+
+  onShowNote: (callback: (data: { heading?: string; html: string }) => void) =>
+    ipcRenderer.on('display:show-note', (_event, data) => callback(data))
 })

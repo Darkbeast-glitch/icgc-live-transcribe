@@ -42,6 +42,41 @@ const TRANSLATION_MAP: Record<string, string> = {
   DARBY: 'darby'
 }
 
+// ESV API (api.esv.org) — free for non-commercial/ministry use with a personal API key
+const ESV_API_KEY = '2c14077cf9bf661826b0bc90fde6faaf9d77fc94'
+const ESV_API_BASE = 'https://api.esv.org/v3/passage/text/'
+
+async function fetchEsvPassage(query: string, includeVerseNumbers: boolean): Promise<string> {
+  const params = new URLSearchParams({
+    q: query,
+    'include-headings': 'false',
+    'include-footnotes': 'false',
+    'include-verse-numbers': includeVerseNumbers ? 'true' : 'false',
+    'include-short-copyright': 'false',
+    'include-passage-references': 'false',
+  })
+  const res = await fetch(`${ESV_API_BASE}?${params}`, {
+    headers: { Authorization: `Token ${ESV_API_KEY}` },
+  })
+  if (!res.ok) throw new Error(`Server error (${res.status}). Try again later.`)
+  const data = (await res.json()) as { passages?: string[] }
+  const passage = data.passages?.[0]
+  if (!passage || !passage.trim()) throw new Error('Passage not found.')
+  return passage.trim()
+}
+
+// Splits ESV's "[1] In the beginning... [2] And the earth..." text into per-verse entries
+function parseEsvVerses(text: string): Array<{ verse: number; text: string }> {
+  const verses: Array<{ verse: number; text: string }> = []
+  const parts = text.split(/\[(\d+)\]\s*/)
+  for (let i = 1; i < parts.length; i += 2) {
+    const num = parseInt(parts[i], 10)
+    const body = (parts[i + 1] || '').replace(/\s+/g, ' ').trim()
+    if (!isNaN(num) && body) verses.push({ verse: num, text: body })
+  }
+  return verses
+}
+
 export function setupBibleHandlers(): void {
   // Fetch a verse — check local DB first, fall back to API
   ipcMain.handle('bible:get-verse', async (_event, { book, chapter, verse, translation }) => {
@@ -61,17 +96,29 @@ export function setupBibleHandlers(): void {
 
     // Fetch from API
     try {
-      const apiCode = TRANSLATION_MAP[trans] || 'kjv'
-      const ref = encodeURIComponent(`${book} ${chapter}:${verse}`)
-      const url = `https://bible-api.com/${ref}?translation=${apiCode}`
+      let text: string
 
-      const response = await fetch(url)
-      if (!response.ok) throw new Error(`API error: ${response.status}`)
+      if (trans === 'ESV') {
+        try {
+          text = await fetchEsvPassage(`${book} ${chapter}:${verse}`, false)
+        } catch {
+          return { success: false, error: `${book} ${chapter}:${verse} was not found. Please check the book, chapter, and verse number.` }
+        }
+      } else {
+        const apiCode = TRANSLATION_MAP[trans] || 'kjv'
+        const ref = encodeURIComponent(`${book} ${chapter}:${verse}`)
+        const url = `https://bible-api.com/${ref}?translation=${apiCode}`
 
-      const data = (await response.json()) as { text: string; reference: string }
-      const text = data.text.trim()
+        const response = await fetch(url)
+        if (response.status === 404) {
+          return { success: false, error: `${book} ${chapter}:${verse} was not found. Please check the book, chapter, and verse number.` }
+        }
+        if (!response.ok) throw new Error(`Server error (${response.status}). Try again later.`)
 
-      // Cache it locally
+        const data = (await response.json()) as { text: string; reference: string }
+        text = data.text.trim()
+      }
+
       db.prepare(
         'INSERT OR IGNORE INTO bible_verses (translation, book, book_number, chapter, verse, text) VALUES (?, ?, ?, ?, ?, ?)'
       ).run(trans, book, 0, chapter, verse, text)
@@ -84,21 +131,29 @@ export function setupBibleHandlers(): void {
 
   // Get a verse range (e.g. John 3:16-18)
   ipcMain.handle('bible:get-verse-range', async (_event, { book, chapter, verseStart, verseEnd, translation }) => {
+    const trans = translation.toUpperCase()
     try {
-      const apiCode = TRANSLATION_MAP[translation.toUpperCase()] || 'kjv'
-      const ref = encodeURIComponent(`${book} ${chapter}:${verseStart}-${verseEnd}`)
-      const url = `https://bible-api.com/${ref}?translation=${apiCode}`
+      let text: string
 
-      const response = await fetch(url)
-      if (!response.ok) throw new Error(`API error: ${response.status}`)
+      if (trans === 'ESV') {
+        text = await fetchEsvPassage(`${book} ${chapter}:${verseStart}-${verseEnd}`, false)
+      } else {
+        const apiCode = TRANSLATION_MAP[trans] || 'kjv'
+        const ref = encodeURIComponent(`${book} ${chapter}:${verseStart}-${verseEnd}`)
+        const url = `https://bible-api.com/${ref}?translation=${apiCode}`
 
-      const data = (await response.json()) as { text: string; reference: string }
+        const response = await fetch(url)
+        if (!response.ok) throw new Error(`API error: ${response.status}`)
+
+        const data = (await response.json()) as { text: string; reference: string }
+        text = data.text.trim()
+      }
 
       return {
         success: true,
-        text: data.text.trim(),
+        text,
         reference: `${book} ${chapter}:${verseStart}-${verseEnd}`,
-        translation: translation.toUpperCase()
+        translation: trans
       }
     } catch (err) {
       return { success: false, error: String(err) }
@@ -130,24 +185,34 @@ export function setupBibleHandlers(): void {
     if (verses.length > 0) return { success: true, verses, book, chapter, translation: trans }
 
     try {
-      const apiCode = TRANSLATION_MAP[trans] || 'kjv'
-      const ref = encodeURIComponent(`${book} ${chapter}`)
-      const res = await fetch(`https://bible-api.com/${ref}?translation=${apiCode}`)
-      if (!res.ok) throw new Error(`${res.status}`)
-      const data = (await res.json()) as { verses: Array<{ verse: number; text: string }> }
+      let chapterVerses: Array<{ verse: number; text: string }>
+
+      if (trans === 'ESV') {
+        try {
+          const passage = await fetchEsvPassage(`${book} ${chapter}`, true)
+          chapterVerses = parseEsvVerses(passage)
+          if (chapterVerses.length === 0) throw new Error('empty')
+        } catch {
+          throw new Error(`${book} chapter ${chapter} was not found. Please check the book and chapter number.`)
+        }
+      } else {
+        const apiCode = TRANSLATION_MAP[trans] || 'kjv'
+        const ref = encodeURIComponent(`${book} ${chapter}`)
+        const res = await fetch(`https://bible-api.com/${ref}?translation=${apiCode}`)
+        if (res.status === 404) throw new Error(`${book} chapter ${chapter} was not found. Please check the book and chapter number.`)
+        if (!res.ok) throw new Error(`Server error (${res.status}). Try again later.`)
+        const data = (await res.json()) as { verses: Array<{ verse: number; text: string }> }
+        chapterVerses = data.verses.map((v) => ({ verse: v.verse, text: v.text.trim() }))
+      }
 
       const insert = db.prepare(
         'INSERT OR IGNORE INTO bible_verses (translation, book, book_number, chapter, verse, text) VALUES (?, ?, ?, ?, ?, ?)'
       )
       db.transaction(() => {
-        for (const v of data.verses) insert.run(trans, book, 0, chapter, v.verse, v.text.trim())
+        for (const v of chapterVerses) insert.run(trans, book, 0, chapter, v.verse, v.text)
       })()
 
-      return {
-        success: true,
-        verses: data.verses.map((v) => ({ verse: v.verse, text: v.text.trim() })),
-        book, chapter, translation: trans,
-      }
+      return { success: true, verses: chapterVerses, book, chapter, translation: trans }
     } catch (err) {
       return { success: false, error: String(err) }
     }

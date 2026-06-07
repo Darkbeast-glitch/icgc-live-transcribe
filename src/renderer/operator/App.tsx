@@ -13,8 +13,10 @@ import ManualSearch from './components/ManualSearch'
 import HistoryPanel from './components/HistoryPanel'
 import TimerPanel from './components/TimerPanel'
 import MediaPanel, { MediaItem } from './components/MediaPanel'
+import NotesPanel from './components/NotesPanel'
+import { noteHtmlToPlainText } from '@shared/sanitizeNoteHtml'
 
-type BottomTab = 'bible' | 'smart' | 'songs' | 'service' | 'history' | 'media'
+type BottomTab = 'bible' | 'smart' | 'songs' | 'service' | 'history' | 'media' | 'notes'
 
 const THEME_KEY = 'projector_theme_v1'
 
@@ -68,7 +70,6 @@ export default function App() {
     window.api.setTheme(theme)
     localStorage.setItem(THEME_KEY, JSON.stringify(theme))
   }, [theme])
-  useEffect(() => { window.api.setTheme(theme) }, [])
 
   const presentItem = useCallback((item: QueueItem) => {
     window.api.showVerse({ text: item.text, reference: item.reference, translation: item.translation })
@@ -147,6 +148,7 @@ export default function App() {
     { id: 'songs', label: 'Songs' },
     { id: 'service', label: 'Service Plan' },
     { id: 'media', label: '🖼 Media' },
+    { id: 'notes', label: '📝 Notes' },
     { id: 'history', label: 'History' },
   ]
 
@@ -254,6 +256,13 @@ export default function App() {
                   onItemsChange={setMediaItems}
                   onDisplay={(display) => setNowShowing(display)}
                 />
+              )}
+              {bottomTab === 'notes' && (
+                <NotesPanel onDisplay={(info) => {
+                  setNowShowing({ type: 'note', note: info })
+                  const plain = noteHtmlToPlainText(info.html)
+                  window.api.addHistory({ type: 'note', content: info.heading ? `${info.heading}: ${plain}` : plain })
+                }} />
               )}
               {bottomTab === 'history' && <HistoryPanel />}
             </div>

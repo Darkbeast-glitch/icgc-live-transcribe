@@ -21,6 +21,7 @@ type Mode = 'online' | 'offline'
 
 const STORAGE_KEY = 'deepgram_api_key'
 const MODE_KEY = 'transcript_mode'
+const DEVICE_KEY = 'transcript_audio_device'
 
 function genId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
@@ -47,6 +48,12 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
   const [detected, setDetected] = useState<DetectedVerse[]>([])
   const [status, setStatus] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
+  const [expanded, setExpanded] = useState(false)
+
+  // Audio input device selection (e.g. virtual cable fed from vMix)
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([])
+  const [selectedDeviceId, setSelectedDeviceId] = useState(() => localStorage.getItem(DEVICE_KEY) || '')
+  const [showDevicePicker, setShowDevicePicker] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
@@ -54,9 +61,36 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
   const audioCtxRef = useRef<AudioContext | null>(null)
   const chunkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
+  const pcmChunksRef = useRef<Float32Array[]>([])
+  const processorRef = useRef<ScriptProcessorNode | null>(null)
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null)
   const seenRef = useRef<Set<string>>(new Set())
   const transcriptBoxRef = useRef<HTMLDivElement>(null)
   const fetchRef = useRef<(s: DetectedScripture) => void>(() => {})
+
+  // Load available audio input devices (labels populate after mic permission is granted)
+  const loadAudioDevices = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      setAudioDevices(devices.filter((d) => d.kind === 'audioinput'))
+    } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => {
+    loadAudioDevices()
+    navigator.mediaDevices.addEventListener?.('devicechange', loadAudioDevices)
+    return () => navigator.mediaDevices.removeEventListener?.('devicechange', loadAudioDevices)
+  }, [loadAudioDevices])
+
+  const selectDevice = (deviceId: string) => {
+    setSelectedDeviceId(deviceId)
+    localStorage.setItem(DEVICE_KEY, deviceId)
+  }
+
+  const audioConstraints = useCallback((): MediaStreamConstraints => ({
+    audio: selectedDeviceId ? { deviceId: { exact: selectedDeviceId } } : true,
+    video: false,
+  }), [selectedDeviceId])
 
   // Check Whisper model status on mount
   useEffect(() => {
@@ -64,14 +98,18 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
       setWhisperReady(s.ready)
       setWhisperLoading(s.loading)
     })
-    window.api.onWhisperProgress(({ file, progress }) => {
+    const offProgress = window.api.onWhisperProgress(({ file, progress }) => {
       setWhisperProgress({ file: file.split('/').pop() ?? file, pct: progress })
     })
-    window.api.onWhisperReady(() => {
+    const offReady = window.api.onWhisperReady(() => {
       setWhisperReady(true)
       setWhisperLoading(false)
       setWhisperProgress(null)
     })
+    return () => {
+      offProgress()
+      offReady()
+    }
   }, [])
 
   const fetchVerse = useCallback(async (scripture: DetectedScripture) => {
@@ -131,9 +169,10 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
     if (!apiKey) { setShowKeySetup(true); return }
     setErrorMsg(''); setStatus('connecting…')
     let stream: MediaStream
-    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }) }
-    catch { setErrorMsg('Microphone access denied.'); setStatus(''); return }
+    try { stream = await navigator.mediaDevices.getUserMedia(audioConstraints()) }
+    catch { setErrorMsg('Could not access the selected audio input.'); setStatus(''); return }
     streamRef.current = stream
+    loadAudioDevices()
 
     const ws = new WebSocket(
       'wss://api.deepgram.com/v1/listen?model=nova-2&language=en&smart_format=true&interim_results=true&punctuate=true&utterance_end_ms=1000',
@@ -170,7 +209,7 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
       setIsListening(false); setInterimText(''); setStatus('')
       if (e.code === 1008) setErrorMsg('Invalid API key.')
     }
-  }, [apiKey, appendTranscript])
+  }, [apiKey, appendTranscript, audioConstraints, loadAudioDevices])
 
   // ── Offline (Whisper) ────────────────────────────────────────────────────
 
@@ -190,61 +229,60 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
     if (!whisperReady) return
     setErrorMsg('')
     let stream: MediaStream
-    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }) }
-    catch { setErrorMsg('Microphone access denied. Check system permissions.'); return }
+    try { stream = await navigator.mediaDevices.getUserMedia(audioConstraints()) }
+    catch { setErrorMsg('Could not access the selected audio input. Check system permissions.'); return }
     streamRef.current = stream
-
-    // Prefer PCM wav so AudioContext can always decode it; fall back to webm
-    const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus']
-      .find((t) => MediaRecorder.isTypeSupported(t)) || ''
-    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
-    recorderRef.current = recorder
-    audioChunksRef.current = []
-
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) audioChunksRef.current.push(e.data)
-    }
-    recorder.start(250)
+    loadAudioDevices()
     setIsListening(true)
     setStatus('listening…')
 
     const WHISPER_SAMPLE_RATE = 16000
-    // Shared AudioContext — reuse instead of creating one per chunk
+    // Use ScriptProcessorNode to capture raw PCM — avoids MediaRecorder webm
+    // encode/decode cycle that fails on some Electron builds
     const audioCtx = new AudioContext()
+    audioCtxRef.current = audioCtx
+
+    const source = audioCtx.createMediaStreamSource(stream)
+    sourceRef.current = source
+    // Buffer size 4096 gives ~93ms per callback at 44.1kHz
+    const processor = audioCtx.createScriptProcessor(4096, 1, 1)
+    processorRef.current = processor
+    pcmChunksRef.current = []
+
+    processor.onaudioprocess = (e) => {
+      const channelData = e.inputBuffer.getChannelData(0)
+      pcmChunksRef.current.push(new Float32Array(channelData))
+    }
+
+    source.connect(processor)
+    processor.connect(audioCtx.destination)
 
     chunkIntervalRef.current = setInterval(async () => {
-      const chunks = audioChunksRef.current.splice(0)
+      const chunks = pcmChunksRef.current.splice(0)
       if (chunks.length === 0) return
 
-      const blob = new Blob(chunks, { type: mimeType || 'audio/webm' })
+      // Concatenate all captured PCM chunks
+      const totalLength = chunks.reduce((sum, c) => sum + c.length, 0)
+      if (totalLength < 100) return
+      const combined = new Float32Array(totalLength)
+      let offset = 0
+      for (const chunk of chunks) { combined.set(chunk, offset); offset += chunk.length }
+
+      // Resample from native sample rate to 16kHz for Whisper
+      const numFrames = Math.ceil(combined.length * WHISPER_SAMPLE_RATE / audioCtx.sampleRate)
+      const offlineCtx = new OfflineAudioContext(1, numFrames, WHISPER_SAMPLE_RATE)
+      const buffer = offlineCtx.createBuffer(1, combined.length, audioCtx.sampleRate)
+      buffer.copyToChannel(combined, 0)
+      const src = offlineCtx.createBufferSource()
+      src.buffer = buffer
+      src.connect(offlineCtx.destination)
+      src.start(0)
+      const resampled = await offlineCtx.startRendering()
+      const float32 = new Float32Array(resampled.getChannelData(0))
+
       setIsProcessing(true)
       try {
-        const arrayBuffer = await blob.arrayBuffer()
-        let decoded: AudioBuffer
-        try {
-          decoded = await audioCtx.decodeAudioData(arrayBuffer)
-        } catch (e) {
-          setErrorMsg(`Audio decode failed: ${String(e)}`)
-          setIsProcessing(false)
-          return
-        }
-
-        // Resample to 16kHz mono — Whisper's required input format
-        const numFrames = Math.ceil(decoded.duration * WHISPER_SAMPLE_RATE)
-        if (numFrames < 100) { setIsProcessing(false); return } // skip near-empty chunks
-        const offlineCtx = new OfflineAudioContext(1, numFrames, WHISPER_SAMPLE_RATE)
-        const src = offlineCtx.createBufferSource()
-        src.buffer = decoded
-        src.connect(offlineCtx.destination)
-        src.start(0)
-        const resampled = await offlineCtx.startRendering()
-
-        // Copy channel data into its own ArrayBuffer to avoid offset/view issues
-        const channelData = resampled.getChannelData(0)
-        const float32 = new Float32Array(channelData)
-
         const result = await window.api.whisperTranscribe(float32.buffer, WHISPER_SAMPLE_RATE)
-
         if (!result.success) {
           setErrorMsg(`Whisper error: ${result.error ?? 'unknown'}`)
         } else if (result.text && result.text.trim().length > 1) {
@@ -256,20 +294,21 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
       }
       setIsProcessing(false)
     }, 4000)
-
-    audioCtxRef.current = audioCtx
-  }, [whisperReady, appendTranscript])
+  }, [whisperReady, appendTranscript, audioConstraints, loadAudioDevices])
 
   // ── Shared stop ──────────────────────────────────────────────────────────
 
   const stopListening = useCallback(() => {
     if (chunkIntervalRef.current) { clearInterval(chunkIntervalRef.current); chunkIntervalRef.current = null }
+    processorRef.current?.disconnect(); processorRef.current = null
+    sourceRef.current?.disconnect(); sourceRef.current = null
     recorderRef.current?.stop(); recorderRef.current = null
     streamRef.current?.getTracks().forEach((t) => t.stop()); streamRef.current = null
     audioCtxRef.current?.close(); audioCtxRef.current = null
     if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); wsRef.current = null }
     setIsListening(false); setInterimText(''); setStatus(''); setIsProcessing(false)
     audioChunksRef.current = []
+    pcmChunksRef.current = []
   }, [])
 
   const handleStart = useCallback(() => {
@@ -286,43 +325,22 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
 
   useEffect(() => () => {
     if (chunkIntervalRef.current) clearInterval(chunkIntervalRef.current)
+    processorRef.current?.disconnect()
+    sourceRef.current?.disconnect()
     recorderRef.current?.stop()
     streamRef.current?.getTracks().forEach((t) => t.stop())
     audioCtxRef.current?.close()
     if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close() }
   }, [])
 
-  return (
-    <div className="flex flex-col w-64 shrink-0 border-r border-[#252528]">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[#252528]">
-        <div className="flex items-center gap-2">
-          {isListening && <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />}
-          <span className="text-slate-300 text-xs font-medium">Live Transcript</span>
-          {status && <span className="text-slate-500 text-xs italic">{status}</span>}
-          {isProcessing && <span className="text-purple-400 text-xs italic">processing…</span>}
-        </div>
-        {mode === 'online' && (
-          <button
-            onClick={() => { setShowKeySetup((v) => !v); setKeyInput('') }}
-            className="text-slate-600 hover:text-slate-400 p-1"
-            title="Deepgram API key"
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-            </svg>
-          </button>
-        )}
-      </div>
-
+  const transcriptContent = (isModal: boolean) => (
+    <>
       {/* Mode toggle */}
-      <div className="flex gap-1 px-3 py-2 border-b border-[#252528]">
+      <div className={`flex gap-1 px-3 py-2 border-b border-[#252528] ${isModal ? 'shrink-0' : ''}`}>
         <button
           onClick={() => switchMode('online')}
           className={`flex-1 py-1 text-[10px] font-medium rounded transition-colors ${
-            mode === 'online'
-              ? 'bg-blue-600 text-white'
-              : 'bg-[#1a1a1e] text-slate-500 hover:text-slate-300'
+            mode === 'online' ? 'bg-blue-600 text-white' : 'bg-[#1a1a1e] text-slate-500 hover:text-slate-300'
           }`}
         >
           ☁ Online
@@ -330,18 +348,69 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
         <button
           onClick={() => switchMode('offline')}
           className={`flex-1 py-1 text-[10px] font-medium rounded transition-colors ${
-            mode === 'offline'
-              ? 'bg-purple-600 text-white'
-              : 'bg-[#1a1a1e] text-slate-500 hover:text-slate-300'
+            mode === 'offline' ? 'bg-purple-600 text-white' : 'bg-[#1a1a1e] text-slate-500 hover:text-slate-300'
           }`}
         >
           ◉ Offline
         </button>
       </div>
 
+      {/* Audio input device picker */}
+      <div className="px-3 pt-2 shrink-0">
+        <button
+          onClick={() => setShowDevicePicker((v) => !v)}
+          className="w-full flex items-center justify-between text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
+        >
+          <span className="truncate">
+            🎙 {selectedDeviceId
+              ? (audioDevices.find((d) => d.deviceId === selectedDeviceId)?.label || 'Selected input')
+              : 'System default microphone'}
+          </span>
+          <span>{showDevicePicker ? '▲' : '▼'}</span>
+        </button>
+        {showDevicePicker && (
+          <div className="mt-1.5 p-2 bg-[#1a1a1e] border border-[#333338] rounded-lg space-y-1">
+            <p className="text-slate-600 text-[10px] mb-1">
+              Pick a virtual audio cable fed from vMix to transcribe its program audio instead of the room mic.
+            </p>
+            <button
+              onClick={() => selectDevice('')}
+              className={`w-full text-left px-2 py-1 text-[11px] rounded transition-colors ${
+                !selectedDeviceId ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-[#252528]'
+              }`}
+            >
+              System default microphone
+            </button>
+            {audioDevices.map((d) => (
+              <button
+                key={d.deviceId}
+                onClick={() => selectDevice(d.deviceId)}
+                className={`w-full text-left px-2 py-1 text-[11px] rounded transition-colors truncate ${
+                  selectedDeviceId === d.deviceId ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-[#252528]'
+                }`}
+                title={d.label || d.deviceId}
+              >
+                {d.label || `Input ${d.deviceId.slice(0, 8)}`}
+              </button>
+            ))}
+            {audioDevices.length === 0 && (
+              <p className="text-slate-600 text-[10px] px-2 py-1">
+                No labeled inputs yet — start transcribing once to grant mic permission, then reopen this list.
+              </p>
+            )}
+            <button
+              onClick={loadAudioDevices}
+              className="w-full text-center text-[10px] text-slate-600 hover:text-slate-400 pt-1 transition-colors"
+            >
+              ↻ Refresh devices
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Online: API key setup */}
       {mode === 'online' && showKeySetup && (
-        <div className="mx-3 mt-2 p-2.5 bg-[#1a1a1e] border border-[#333338] rounded-lg">
+        <div className="mx-3 mt-2 p-2.5 bg-[#1a1a1e] border border-[#333338] rounded-lg shrink-0">
           <p className="text-slate-400 text-xs mb-1.5">Deepgram API Key</p>
           <div className="flex gap-1.5">
             <input
@@ -361,7 +430,7 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
 
       {/* Offline: model status */}
       {mode === 'offline' && (
-        <div className="mx-3 mt-2">
+        <div className="mx-3 mt-2 shrink-0">
           {whisperReady ? (
             <div className="flex items-center gap-2 px-2 py-1.5 bg-green-900/20 border border-green-800/40 rounded-lg">
               <span className="w-1.5 h-1.5 bg-green-400 rounded-full" />
@@ -374,10 +443,7 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
                 <span className="text-slate-500 text-[10px]">{whisperProgress?.pct ?? 0}%</span>
               </div>
               <div className="h-1 bg-[#252528] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-purple-500 rounded-full transition-all"
-                  style={{ width: `${whisperProgress?.pct ?? 0}%` }}
-                />
+                <div className="h-full bg-purple-500 rounded-full transition-all" style={{ width: `${whisperProgress?.pct ?? 0}%` }} />
               </div>
               {whisperProgress?.file && (
                 <p className="text-slate-600 text-[10px] mt-1 truncate">{whisperProgress.file}</p>
@@ -386,10 +452,8 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
           ) : (
             <div className="p-2 bg-[#1a1a1e] border border-[#333338] rounded-lg">
               <p className="text-slate-500 text-xs mb-2">Whisper Base model not loaded (~145 MB)</p>
-              <button
-                onClick={loadWhisperModel}
-                className="w-full py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium rounded transition-colors"
-              >
+              <button onClick={loadWhisperModel}
+                className="w-full py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium rounded transition-colors">
                 Download & Load Model
               </button>
             </div>
@@ -398,15 +462,18 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
       )}
 
       {errorMsg && (
-        <div className="mx-3 mt-2 px-2 py-1.5 bg-red-900/30 border border-red-800/60 rounded text-red-400 text-xs">
+        <div className="mx-3 mt-2 px-2 py-1.5 bg-red-900/30 border border-red-800/60 rounded text-red-400 text-xs shrink-0">
           {errorMsg}
         </div>
       )}
 
       {/* Transcript */}
-      <div ref={transcriptBoxRef} className="flex-1 overflow-y-auto p-3 text-xs leading-relaxed min-h-0">
-        <span className="text-slate-400">{fullTranscript}</span>
-        {interimText && <span className="text-slate-600 italic">{interimText}</span>}
+      <div
+        ref={isModal ? undefined : transcriptBoxRef}
+        className={`flex-1 overflow-y-auto p-3 leading-relaxed min-h-0 ${isModal ? 'text-base' : 'text-xs'}`}
+      >
+        <span className="text-slate-300">{fullTranscript}</span>
+        {interimText && <span className="text-slate-500 italic">{interimText}</span>}
         {!fullTranscript && !interimText && (
           <p className="text-slate-700 text-center mt-8">
             {mode === 'online'
@@ -418,7 +485,7 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
 
       {/* Detected verses inline */}
       {detected.length > 0 && (
-        <div className="border-t border-[#252528] max-h-36 overflow-y-auto shrink-0">
+        <div className="border-t border-[#252528] max-h-48 overflow-y-auto shrink-0">
           <div className="flex items-center justify-between px-3 py-1 border-b border-[#1e1e22]">
             <span className="text-slate-500 text-[10px]">Detected ({detected.length})</span>
             <button
@@ -474,6 +541,84 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
           </button>
         )}
       </div>
+    </>
+  )
+
+  return (
+    <>
+    {/* Expanded modal overlay */}
+    {expanded && (
+      <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/80 p-6">
+        <div className="flex flex-col w-full max-w-2xl bg-[#0e0e11] border border-[#333338] rounded-2xl shadow-2xl overflow-hidden">
+          {/* Modal header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[#252528] shrink-0">
+            <div className="flex items-center gap-2">
+              {isListening && <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />}
+              <span className="text-white font-semibold text-sm">Live Transcript</span>
+              {status && <span className="text-slate-500 text-xs italic">{status}</span>}
+              {isProcessing && <span className="text-purple-400 text-xs italic">processing…</span>}
+            </div>
+            <div className="flex items-center gap-2">
+              {mode === 'online' && (
+                <button
+                  onClick={() => { setShowKeySetup((v) => !v); setKeyInput('') }}
+                  className="text-slate-600 hover:text-slate-400 p-1"
+                  title="Deepgram API key"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                </button>
+              )}
+              <button
+                onClick={() => setExpanded(false)}
+                className="text-slate-500 hover:text-white text-xl leading-none transition-colors"
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+          {transcriptContent(true)}
+        </div>
+      </div>
+    )}
+
+    <div className="flex flex-col w-64 shrink-0 border-r border-[#252528]">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[#252528]">
+        <div className="flex items-center gap-2">
+          {isListening && <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />}
+          <span className="text-slate-300 text-xs font-medium">Live Transcript</span>
+          {status && <span className="text-slate-500 text-xs italic">{status}</span>}
+          {isProcessing && <span className="text-purple-400 text-xs italic">processing…</span>}
+        </div>
+        <div className="flex items-center gap-1">
+          {mode === 'online' && (
+            <button
+              onClick={() => { setShowKeySetup((v) => !v); setKeyInput('') }}
+              className="text-slate-600 hover:text-slate-400 p-1"
+              title="Deepgram API key"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+              </svg>
+            </button>
+          )}
+          <button
+            onClick={() => setExpanded(true)}
+            className="text-slate-600 hover:text-slate-300 p-1 transition-colors"
+            title="Expand transcript"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {transcriptContent(false)}
     </div>
+    </>
   )
 }
