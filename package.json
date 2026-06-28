@@ -1,7 +1,7 @@
 {
-  "name": "icgc-fmt-scripture-display",
-  "version": "1.2.1",
-  "description": "Church scripture & lyrics display app",
+  "name": "icgc-fmt-live-word",
+  "version": "1.3.0",
+  "description": "ICGC FMT Live Word — Church scripture & lyrics display app",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -37,7 +37,7 @@
   },
   "build": {
     "appId": "com.icgcfmt.churchdisplay",
-    "productName": "ICGC FMT Scripture Display",
+    "productName": "ICGC FMT Live Word",
     "copyright": "ICGC FMT",
     "asar": true,
     "asarUnpack": [
@@ -66,7 +66,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "ICGC FMT Scripture Display",
+      "shortcutName": "ICGC FMT Live Word",
       "installerIcon": "resources/icon.ico",
       "uninstallerIcon": "resources/icon.ico"
     },
@@ -75,11 +75,11 @@
       "icon": "resources/icon.icns",
       "category": "public.app-category.utilities",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "ICGC FMT Scripture Display needs microphone access to transcribe live speech for on-screen captions."
+        "NSMicrophoneUsageDescription": "ICGC FMT Live Word needs microphone access to transcribe live speech for on-screen captions."
       }
     },
     "dmg": {
-      "title": "ICGC FMT Scripture Display"
+      "title": "ICGC FMT Live Word"
     }
   }
 }

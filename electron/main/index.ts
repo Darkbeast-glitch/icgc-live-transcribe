@@ -23,7 +23,7 @@ function createOperatorWindow(): void {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    title: 'ICGC-FMT  — Operator Console',
+    title: 'ICGC FMT Live Word — Operator Console',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -62,7 +62,7 @@ function createProjectorWindow(): void {
     height: 720,
     minWidth: 800,
     minHeight: 450,
-    title: 'ICGC FMT Church Scrip — Projector',
+    title: 'ICGC FMT Live Word — Projector',
     backgroundColor: '#000000',
     webPreferences: {
       preload: join(__dirname, '../preload/projector.js'),

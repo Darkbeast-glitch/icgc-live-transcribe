@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ActiveDisplay, QueueItem } from '@shared/types'
+import { ActiveDisplay, QueueItem, BIBLE_BOOKS } from '@shared/types'
 import { ProjectorTheme, buildTheme, FontSizeKey } from '@shared/themes'
 import TopBar from './components/TopBar'
 import TranscriptPanel from './components/TranscriptPanel'
@@ -59,6 +59,9 @@ export default function App() {
   // Active verse for chapter browser sync
   const [activeVerse, setActiveVerse] = useState<{ book: string; chapter: number; verse: number } | null>(null)
 
+  // Coords of whatever verse is currently live — used to auto-switch translation
+  const liveVerseRef = useRef<{ book: string; chapter: number; verse: number } | null>(null)
+
   // Session timer
   useEffect(() => {
     const id = setInterval(() => setSessionSeconds((s) => s + 1), 1000)
@@ -71,9 +74,55 @@ export default function App() {
     localStorage.setItem(THEME_KEY, JSON.stringify(theme))
   }, [theme])
 
+  // When translation changes, re-fetch and re-push the live verse in the new version
+  useEffect(() => {
+    const coords = liveVerseRef.current
+    if (!coords) return
+
+    // Check nowShowing via a callback ref so we don't need it as a dep
+    setNowShowing((prev) => {
+      if (prev.type !== 'verse') return prev
+      // Fire the fetch asynchronously — state setter just reads current value
+      ;(async () => {
+        const res = await window.api.getVerse({ book: coords.book, chapter: coords.chapter, verse: coords.verse, translation })
+        if (!res.success || !res.text) return
+        const updated: ActiveDisplay = {
+          type: 'verse',
+          verse: {
+            text: res.text,
+            reference: res.reference!,
+            translation: res.translation!,
+            book: coords.book,
+            chapter: coords.chapter,
+            verseNum: coords.verse,
+          },
+        }
+        window.api.showVerse({ text: res.text, reference: res.reference!, translation: res.translation! })
+        setNowShowing(updated)
+      })()
+      return prev // keep existing display until fetch completes
+    })
+  }, [translation])
+
+  // Parse a reference string like "John 3:16" → { book, chapter, verse }
+  // Used when ManualSearch/SmartSearch presents a verse (they don't pass coords directly)
+  const recordLiveFromReference = useCallback((reference: string) => {
+    const match = reference.match(/^(.+?)\s+(\d+):(\d+)/)
+    if (!match) return
+    const rawBook = match[1].trim()
+    const chapter = parseInt(match[2])
+    const verse = parseInt(match[3])
+    const book =
+      BIBLE_BOOKS.find((b) => b.toLowerCase() === rawBook.toLowerCase()) ||
+      BIBLE_BOOKS.find((b) => b.toLowerCase().startsWith(rawBook.toLowerCase()))
+    if (book) liveVerseRef.current = { book, chapter, verse }
+  }, [])
+
   const presentItem = useCallback((item: QueueItem) => {
     window.api.showVerse({ text: item.text, reference: item.reference, translation: item.translation })
     window.api.addHistory({ type: 'verse', reference: item.reference, content: item.text, translation: item.translation })
+
+    liveVerseRef.current = { book: item.book, chapter: item.chapter, verse: item.verse }
 
     const display: ActiveDisplay = {
       type: 'verse',
@@ -130,6 +179,7 @@ export default function App() {
 
   const handleClear = useCallback(() => {
     window.api.clearDisplay()
+    liveVerseRef.current = null
     setNowShowing(BLANK)
     setProgramPreview(BLANK)
     setNowShowingId(null)
@@ -232,20 +282,24 @@ export default function App() {
               {bottomTab === 'smart' && (
                 <ManualSearch translation={translation} onDisplay={(info) => {
                   if (info.type === 'verse') {
+                    recordLiveFromReference(info.label)
                     setNowShowing({ type: 'verse', verse: { text: '', reference: info.label, translation: info.translation ?? '' } })
                   }
                 }} />
               )}
               {bottomTab === 'songs' && (
                 <SongPanel onDisplay={(info) => {
+                  liveVerseRef.current = null
                   setNowShowing({ type: 'lyrics', lyrics: { title: info.label, lines: info.lines ?? [] } })
                 }} />
               )}
               {bottomTab === 'service' && (
                 <ServicePlanner translation={translation} onDisplay={(info) => {
                   if (info.type === 'verse') {
+                    recordLiveFromReference(info.label)
                     setNowShowing({ type: 'verse', verse: { text: '', reference: info.label, translation: info.translation ?? '' } })
                   } else {
+                    liveVerseRef.current = null
                     setNowShowing({ type: 'lyrics', lyrics: { title: info.label, lines: [] } })
                   }
                 }} />

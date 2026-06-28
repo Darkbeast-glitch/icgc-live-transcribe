@@ -66,10 +66,12 @@ export interface DetectedScripture {
   raw: string
 }
 
-// Translations supported via bible-api.com (free, no key) plus ESV (via api.esv.org with a personal API key)
-export const TRANSLATIONS = ['KJV', 'ESV', 'WEB', 'ASV', 'NASB', 'BBE', 'YLT', 'DARBY']
+export const TRANSLATIONS = ['NIV', 'NLT', 'NKJV', 'KJV', 'ESV', 'WEB', 'ASV', 'NASB', 'BBE', 'YLT', 'DARBY']
 
 export const TRANSLATION_LABELS: Record<string, string> = {
+  NIV: 'NIV – New International Version',
+  NLT: 'NLT – New Living Translation',
+  NKJV: 'NKJV – New King James Version',
   KJV: 'KJV – King James Version',
   ESV: 'ESV – English Standard Version',
   WEB: 'WEB – World English Bible',

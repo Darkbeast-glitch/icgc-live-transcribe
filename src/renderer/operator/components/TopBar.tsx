@@ -26,7 +26,7 @@ export default function TopBar({ sessionSeconds, translation, onTranslationChang
         </div>
         <span className="text-white text-sm font-semibold tracking-wide">ICGC FMT</span>
         <span className="text-[10px] text-orange-400 border border-orange-500/40 rounded px-1.5 py-0.5 font-medium">
-          LIVE
+          LIVE WORD
         </span>
       </div>
 

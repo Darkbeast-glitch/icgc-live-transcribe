@@ -42,6 +42,90 @@ const TRANSLATION_MAP: Record<string, string> = {
   DARBY: 'darby'
 }
 
+// API.Bible — NIV, NLT, NKJV via rest.api.bible
+const APIBIBLE_KEY = 'v5gH-oIsKnvmkvgVZZcX9'
+const APIBIBLE_BASE = 'https://rest.api.bible/v1'
+
+const APIBIBLE_IDS: Record<string, string> = {
+  NIV:  '78a9f6124f344018-01',
+  NLT:  'd6e14a625393b4da-01',
+  NKJV: '63097d2a0a2f7db3-01',
+}
+
+// Maps app book names → USFM codes used by API.Bible
+const BOOK_TO_USFM: Record<string, string> = {
+  'Genesis': 'GEN', 'Exodus': 'EXO', 'Leviticus': 'LEV', 'Numbers': 'NUM',
+  'Deuteronomy': 'DEU', 'Joshua': 'JOS', 'Judges': 'JDG', 'Ruth': 'RUT',
+  '1 Samuel': '1SA', '2 Samuel': '2SA', '1 Kings': '1KI', '2 Kings': '2KI',
+  '1 Chronicles': '1CH', '2 Chronicles': '2CH', 'Ezra': 'EZR', 'Nehemiah': 'NEH',
+  'Esther': 'EST', 'Job': 'JOB', 'Psalms': 'PSA', 'Proverbs': 'PRO',
+  'Ecclesiastes': 'ECC', 'Song of Solomon': 'SNG', 'Isaiah': 'ISA',
+  'Jeremiah': 'JER', 'Lamentations': 'LAM', 'Ezekiel': 'EZK', 'Daniel': 'DAN',
+  'Hosea': 'HOS', 'Joel': 'JOL', 'Amos': 'AMO', 'Obadiah': 'OBA', 'Jonah': 'JON',
+  'Micah': 'MIC', 'Nahum': 'NAM', 'Habakkuk': 'HAB', 'Zephaniah': 'ZEP',
+  'Haggai': 'HAG', 'Zechariah': 'ZEC', 'Malachi': 'MAL', 'Matthew': 'MAT',
+  'Mark': 'MRK', 'Luke': 'LUK', 'John': 'JHN', 'Acts': 'ACT', 'Romans': 'ROM',
+  '1 Corinthians': '1CO', '2 Corinthians': '2CO', 'Galatians': 'GAL',
+  'Ephesians': 'EPH', 'Philippians': 'PHP', 'Colossians': 'COL',
+  '1 Thessalonians': '1TH', '2 Thessalonians': '2TH', '1 Timothy': '1TI',
+  '2 Timothy': '2TI', 'Titus': 'TIT', 'Philemon': 'PHM', 'Hebrews': 'HEB',
+  'James': 'JAS', '1 Peter': '1PE', '2 Peter': '2PE', '1 John': '1JN',
+  '2 John': '2JN', '3 John': '3JN', 'Jude': 'JUD', 'Revelation': 'REV',
+}
+
+const APIBIBLE_PARAMS = new URLSearchParams({
+  'content-type': 'text',
+  'include-notes': 'false',
+  'include-titles': 'false',
+  'include-chapter-numbers': 'false',
+  'include-verse-spans': 'false',
+})
+
+async function fetchApiBibleVerse(trans: string, book: string, chapter: number, verse: number): Promise<{ text: string; reference: string }> {
+  const bibleId = APIBIBLE_IDS[trans]
+  const usfm = BOOK_TO_USFM[book]
+  if (!bibleId || !usfm) throw new Error('Translation or book not supported')
+  const verseId = `${usfm}.${chapter}.${verse}`
+  const params = new URLSearchParams(APIBIBLE_PARAMS)
+  params.set('include-verse-numbers', 'false')
+  const res = await fetch(`${APIBIBLE_BASE}/bibles/${bibleId}/verses/${verseId}?${params}`, {
+    headers: { 'api-key': APIBIBLE_KEY }
+  })
+  if (!res.ok) throw new Error(`API error ${res.status}`)
+  const data = (await res.json()) as { data: { content: string; reference: string } }
+  return { text: data.data.content.trim(), reference: data.data.reference }
+}
+
+async function fetchApiBibleRange(trans: string, book: string, chapter: number, verseStart: number, verseEnd: number): Promise<{ text: string; reference: string }> {
+  const bibleId = APIBIBLE_IDS[trans]
+  const usfm = BOOK_TO_USFM[book]
+  if (!bibleId || !usfm) throw new Error('Translation or book not supported')
+  const passageId = `${usfm}.${chapter}.${verseStart}-${usfm}.${chapter}.${verseEnd}`
+  const params = new URLSearchParams(APIBIBLE_PARAMS)
+  params.set('include-verse-numbers', 'false')
+  const res = await fetch(`${APIBIBLE_BASE}/bibles/${bibleId}/passages/${passageId}?${params}`, {
+    headers: { 'api-key': APIBIBLE_KEY }
+  })
+  if (!res.ok) throw new Error(`API error ${res.status}`)
+  const data = (await res.json()) as { data: { content: string; reference: string } }
+  return { text: data.data.content.trim(), reference: data.data.reference }
+}
+
+async function fetchApiBibleChapter(trans: string, book: string, chapter: number): Promise<Array<{ verse: number; text: string }>> {
+  const bibleId = APIBIBLE_IDS[trans]
+  const usfm = BOOK_TO_USFM[book]
+  if (!bibleId || !usfm) throw new Error('Translation or book not supported')
+  const chapterId = `${usfm}.${chapter}`
+  const params = new URLSearchParams(APIBIBLE_PARAMS)
+  params.set('include-verse-numbers', 'true')
+  const res = await fetch(`${APIBIBLE_BASE}/bibles/${bibleId}/chapters/${chapterId}?${params}`, {
+    headers: { 'api-key': APIBIBLE_KEY }
+  })
+  if (!res.ok) throw new Error(`API error ${res.status}`)
+  const data = (await res.json()) as { data: { content: string } }
+  return parseEsvVerses(data.data.content)
+}
+
 // ESV API (api.esv.org) — free for non-commercial/ministry use with a personal API key
 const ESV_API_KEY = '2c14077cf9bf661826b0bc90fde6faaf9d77fc94'
 const ESV_API_BASE = 'https://api.esv.org/v3/passage/text/'
@@ -98,7 +182,14 @@ export function setupBibleHandlers(): void {
     try {
       let text: string
 
-      if (trans === 'ESV') {
+      if (APIBIBLE_IDS[trans]) {
+        try {
+          const result = await fetchApiBibleVerse(trans, book, chapter, verse)
+          text = result.text
+        } catch {
+          return { success: false, error: `${book} ${chapter}:${verse} was not found.` }
+        }
+      } else if (trans === 'ESV') {
         try {
           text = await fetchEsvPassage(`${book} ${chapter}:${verse}`, false)
         } catch {
@@ -135,7 +226,10 @@ export function setupBibleHandlers(): void {
     try {
       let text: string
 
-      if (trans === 'ESV') {
+      if (APIBIBLE_IDS[trans]) {
+        const result = await fetchApiBibleRange(trans, book, chapter, verseStart, verseEnd)
+        text = result.text
+      } else if (trans === 'ESV') {
         text = await fetchEsvPassage(`${book} ${chapter}:${verseStart}-${verseEnd}`, false)
       } else {
         const apiCode = TRANSLATION_MAP[trans] || 'kjv'
@@ -187,7 +281,10 @@ export function setupBibleHandlers(): void {
     try {
       let chapterVerses: Array<{ verse: number; text: string }>
 
-      if (trans === 'ESV') {
+      if (APIBIBLE_IDS[trans]) {
+        chapterVerses = await fetchApiBibleChapter(trans, book, chapter)
+        if (chapterVerses.length === 0) throw new Error(`${book} chapter ${chapter} was not found.`)
+      } else if (trans === 'ESV') {
         try {
           const passage = await fetchEsvPassage(`${book} ${chapter}`, true)
           chapterVerses = parseEsvVerses(passage)
