@@ -61,12 +61,12 @@ export default function SongPanel({ onDisplay }: Props) {
     if (!bankQuery.trim()) return
     setBankLoading(true); setBankError(''); setBankResults([]); setBankPreview(null); setBankSaved(false)
     try {
-      const res = await fetch(`https://api.lyrics.ovh/suggest/${encodeURIComponent(bankQuery)}`)
+      const res = await fetch(`https://wilooper-lyrica.hf.space/api/jiosaavn/search?q=${encodeURIComponent(bankQuery)}`)
       if (!res.ok) throw new Error('Search failed')
       const data = await res.json()
-      const results: BankResult[] = (data.data ?? []).slice(0, 20).map((item: { title: string; artist: { name: string } }) => ({
+      const results: BankResult[] = (data.results ?? []).slice(0, 20).map((item: { title: string; artist: string }) => ({
         title: item.title,
-        artist: item.artist?.name ?? '',
+        artist: item.artist ?? '',
       }))
       setBankResults(results)
       if (results.length === 0) setBankError('No results found. Try a different search.')
@@ -79,10 +79,11 @@ export default function SongPanel({ onDisplay }: Props) {
   const fetchLyrics = async (title: string, artist: string) => {
     setBankFetching(true); setBankPreview(null); setBankSaved(false)
     try {
-      const res = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`)
+      const res = await fetch(`https://wilooper-lyrica.hf.space/lyrics/?artist=${encodeURIComponent(artist)}&song=${encodeURIComponent(title)}&fast=true`)
       if (!res.ok) throw new Error('Not found')
       const data = await res.json()
-      setBankPreview({ title, artist, lyrics: data.lyrics ?? '' })
+      if (data.status !== 'success' || !data.data?.lyrics) throw new Error('Not found')
+      setBankPreview({ title, artist, lyrics: data.data.lyrics })
     } catch {
       setBankError(`Lyrics not available for "${title}".`)
     }
@@ -204,7 +205,7 @@ export default function SongPanel({ onDisplay }: Props) {
           <button onClick={() => { setView('list'); setBankPreview(null); setBankResults([]) }}
             className="text-slate-400 hover:text-white text-xs">← Back</button>
           <h2 className="text-slate-300 text-sm font-medium flex-1">🌐 Lyrics Bank</h2>
-          <span className="text-slate-600 text-xs">Powered by lyrics.ovh</span>
+          <span className="text-slate-600 text-xs">Powered by Lyrica (7 sources)</span>
         </div>
 
         <div className="flex flex-1 min-h-0">
