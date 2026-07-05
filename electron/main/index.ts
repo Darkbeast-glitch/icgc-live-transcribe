@@ -76,6 +76,9 @@ function createProjectorWindow(): void {
     projectorWindow!.show()
   })
 
+  // Prevent Chromium from throttling renders when the projector window is not focused
+  projectorWindow.webContents.setBackgroundThrottling(false)
+
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     projectorWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '/projector.html')
   } else {
