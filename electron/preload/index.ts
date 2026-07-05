@@ -106,5 +106,10 @@ contextBridge.exposeInMainWorld('api', {
     const handler = () => cb()
     ipcRenderer.on('whisper:ready', handler)
     return () => ipcRenderer.removeListener('whisper:ready', handler)
-  }
+  },
+
+  // vMix Web Output
+  vmixStart: () => ipcRenderer.invoke('vmix:start'),
+  vmixStop: () => ipcRenderer.invoke('vmix:stop'),
+  vmixStatus: () => ipcRenderer.invoke('vmix:status'),
 })

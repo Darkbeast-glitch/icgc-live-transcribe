@@ -8,6 +8,7 @@ import { setupSongHandlers } from './handlers/songs'
 import { setupExportHandlers } from './handlers/export'
 import { setupSemanticHandlers } from './handlers/semantic'
 import { setupWhisperHandlers } from './handlers/whisper'
+import { broadcast, startVmixOutput, stopVmixOutput, isVmixOutputRunning } from './handlers/vmix-output'
 
 // Window-capture tools (vMix, OBS, NDI Tools) often show a black/frozen image for
 // GPU-compositied Electron windows. Disabling hardware acceleration makes the
@@ -64,6 +65,7 @@ function createProjectorWindow(): void {
     minHeight: 450,
     title: 'ICGC FMT Live Word — Projector',
     backgroundColor: '#000000',
+    frame: false,
     webPreferences: {
       preload: join(__dirname, '../preload/projector.js'),
       sandbox: false
@@ -81,17 +83,20 @@ function createProjectorWindow(): void {
   }
 }
 
-// IPC: Send display content from operator → projector
+// IPC: Send display content from operator → projector (+ vMix WebSocket output)
 ipcMain.on('display:show-verse', (_event, data) => {
   projectorWindow?.webContents.send('display:show-verse', data)
+  broadcast('verse', data)
 })
 
 ipcMain.on('display:show-lyrics', (_event, data) => {
   projectorWindow?.webContents.send('display:show-lyrics', data)
+  broadcast('lyrics', data)
 })
 
 ipcMain.on('display:clear', () => {
   projectorWindow?.webContents.send('display:clear')
+  broadcast('clear')
 })
 
 ipcMain.on('projector:toggle-fullscreen', () => {
@@ -102,6 +107,7 @@ ipcMain.on('projector:toggle-fullscreen', () => {
 
 ipcMain.on('display:set-theme', (_event, theme) => {
   projectorWindow?.webContents.send('display:set-theme', theme)
+  broadcast('theme', theme)
 })
 
 ipcMain.on('display:show-timer', (_event, data) => {
@@ -114,11 +120,21 @@ ipcMain.on('display:clear-timer', () => {
 
 ipcMain.on('display:show-image', (_event, data: { src: string; caption?: string; fit?: 'contain' | 'cover' }) => {
   projectorWindow?.webContents.send('display:show-image', data)
+  broadcast('clear') // images are local files, can't stream via web
 })
 
 ipcMain.on('display:show-note', (_event, data: { heading?: string; html: string }) => {
   projectorWindow?.webContents.send('display:show-note', data)
+  broadcast('note', data)
 })
+
+// vMix output control
+ipcMain.handle('vmix:start', () => {
+  const port = startVmixOutput()
+  return { port }
+})
+ipcMain.handle('vmix:stop', () => { stopVmixOutput() })
+ipcMain.handle('vmix:status', () => ({ running: isVmixOutputRunning() }))
 
 ipcMain.handle('media:load-image', async () => {
   const { filePaths, canceled } = await dialog.showOpenDialog({

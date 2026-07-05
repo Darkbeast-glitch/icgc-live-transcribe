@@ -74,6 +74,11 @@ interface Window {
     onSemanticModelProgress: (cb: (data: { file: string; progress: number }) => void) => () => void
     onSemanticModelReady: (cb: () => void) => () => void
     onSemanticIndexingProgress: (cb: (data: { done: number; total: number; complete?: boolean }) => void) => () => void
+
+    // vMix Web Output
+    vmixStart: () => Promise<{ port: number }>
+    vmixStop: () => Promise<void>
+    vmixStatus: () => Promise<{ running: boolean }>
   }
 
   projector: {

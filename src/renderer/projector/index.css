@@ -15,6 +15,12 @@ body {
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
+  -webkit-app-region: drag;
+}
+
+/* Allow normal interaction on all interactive elements */
+button, input, select, textarea, a, [role="button"] {
+  -webkit-app-region: no-drag;
 }
 
 #root {

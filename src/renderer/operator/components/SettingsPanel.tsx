@@ -24,6 +24,23 @@ export default function SettingsPanel({ theme, onThemeChange }: Props) {
   const [dlStatus, setDlStatus] = useState<DownloadStatus | null>(null)
   const [semStatus, setSemStatus] = useState<SemanticStatus | null>(null)
   const [modelProgress, setModelProgress] = useState<{ file: string; progress: number } | null>(null)
+  const [vmixRunning, setVmixRunning] = useState(false)
+  const [vmixPort, setVmixPort] = useState(7788)
+
+  useEffect(() => {
+    window.api.vmixStatus().then(({ running }) => setVmixRunning(running))
+  }, [])
+
+  const toggleVmix = async () => {
+    if (vmixRunning) {
+      await window.api.vmixStop()
+      setVmixRunning(false)
+    } else {
+      const { port } = await window.api.vmixStart()
+      setVmixPort(port)
+      setVmixRunning(true)
+    }
+  }
 
   useEffect(() => {
     window.api.getBibleDownloadStatus().then(setDlStatus)
@@ -462,6 +479,60 @@ export default function SettingsPanel({ theme, onThemeChange }: Props) {
                 </div>
               )}
             </div>
+          )}
+        </div>
+      </section>
+
+      {/* vMix Web Output */}
+      <section className="mt-8">
+        <div className="px-5 pb-5">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-white text-sm font-medium">vMix Web Output</p>
+              <p className="text-slate-500 text-xs mt-0.5">Stream projector content to vMix as a Web Browser source</p>
+            </div>
+            <button
+              onClick={toggleVmix}
+              className={`relative w-11 h-6 rounded-full transition-colors ${vmixRunning ? 'bg-orange-500' : 'bg-[#333338]'}`}
+            >
+              <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${vmixRunning ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          {vmixRunning && (
+            <div className="bg-[#0e0e11] border border-orange-500/30 rounded-xl p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+                <span className="text-orange-400 text-xs font-medium">Output active on port {vmixPort}</span>
+              </div>
+
+              <div>
+                <p className="text-slate-400 text-xs mb-1.5">Add this URL in vMix → Add Input → Web Browser:</p>
+                <div className="flex items-center gap-2 bg-[#1a1a1e] border border-[#333338] rounded-lg px-3 py-2">
+                  <code className="text-orange-300 text-sm flex-1 select-all">http://localhost:{vmixPort}</code>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(`http://localhost:${vmixPort}`)}
+                    className="text-slate-500 hover:text-white text-xs transition-colors shrink-0"
+                    title="Copy URL"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+
+              <div className="text-slate-600 text-[10px] space-y-0.5">
+                <p>1. Open vMix → click <strong className="text-slate-500">Add Input</strong></p>
+                <p>2. Choose <strong className="text-slate-500">Web Browser</strong></p>
+                <p>3. Paste the URL above → set resolution to 1920×1080 → click OK</p>
+                <p>4. The source updates live whenever you display scripture, lyrics or notes</p>
+              </div>
+            </div>
+          )}
+
+          {!vmixRunning && (
+            <p className="text-slate-600 text-xs">
+              Enable to expose the projector view on your local network. vMix adds it as a live web source — no NDI SDK required.
+            </p>
           )}
         </div>
       </section>
