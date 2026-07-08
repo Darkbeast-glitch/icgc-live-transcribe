@@ -1,4 +1,4 @@
-import { createServer, Server } from 'http'
+import { createServer, Server, IncomingMessage, ServerResponse } from 'http'
 import { WebSocketServer, WebSocket } from 'ws'
 
 const PORT = 7788
@@ -20,6 +20,76 @@ export function broadcast(type: string, data?: unknown) {
   for (const ws of clients) {
     if (ws.readyState === WebSocket.OPEN) ws.send(msg)
   }
+}
+
+// ── XML / JSON DataSource helpers ─────────────────────────────────────────────
+
+function esc(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+function buildXml(): string {
+  const { type, data } = lastState
+  const d = data as Record<string, unknown> | undefined
+  const lines: string[] = ['<?xml version="1.0" encoding="utf-8"?>', '<display>']
+
+  lines.push(`  <type>${esc(type)}</type>`)
+
+  if (type === 'verse' && d) {
+    const ref = String(d.reference ?? '')
+    const text = String(d.text ?? '')
+    const translation = String(d.translation ?? '')
+    // Parse "John 3:16" into parts
+    const refMatch = ref.match(/^(.+?)\s+(\d+):(\d+)/)
+    lines.push(`  <reference>${esc(ref)}</reference>`)
+    lines.push(`  <book>${esc(refMatch ? refMatch[1] : '')}</book>`)
+    lines.push(`  <chapter>${esc(refMatch ? refMatch[2] : '')}</chapter>`)
+    lines.push(`  <verse>${esc(refMatch ? refMatch[3] : '')}</verse>`)
+    lines.push(`  <translation>${esc(translation)}</translation>`)
+    lines.push(`  <text>${esc(text)}</text>`)
+    // Split into individual lines for GT Title multi-line fields
+    const textLines = text.split(/\n+/).filter(Boolean)
+    textLines.forEach((l, i) => lines.push(`  <line${i + 1}>${esc(l)}</line${i + 1}>`))
+  } else if (type === 'lyrics' && d) {
+    const title = String(d.title ?? '')
+    const artist = String(d.artist ?? '')
+    const rawLines: string[] = Array.isArray(d.lines) ? (d.lines as string[]).filter((l: string) => !l.startsWith('[')) : []
+    lines.push(`  <title>${esc(title)}</title>`)
+    lines.push(`  <artist>${esc(artist)}</artist>`)
+    lines.push(`  <text>${esc(rawLines.join('\n'))}</text>`)
+    rawLines.forEach((l, i) => lines.push(`  <line${i + 1}>${esc(l)}</line${i + 1}>`))
+  } else if (type === 'note' && d) {
+    const heading = String(d.heading ?? '')
+    const html = String(d.html ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+    lines.push(`  <heading>${esc(heading)}</heading>`)
+    lines.push(`  <text>${esc(html)}</text>`)
+  }
+
+  lines.push('</display>')
+  return lines.join('\n')
+}
+
+function handleDataSource(req: IncomingMessage, res: ServerResponse): boolean {
+  const url = req.url ?? '/'
+  if (url === '/current.xml' || url === '/current.xml?') {
+    res.writeHead(200, {
+      'Content-Type': 'application/xml; charset=utf-8',
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'no-cache',
+    })
+    res.end(buildXml())
+    return true
+  }
+  if (url === '/current.json' || url === '/current.json?') {
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'no-cache',
+    })
+    res.end(JSON.stringify(lastState, null, 2))
+    return true
+  }
+  return false
 }
 
 const HTML = (port: number) => `<!DOCTYPE html>
@@ -166,7 +236,8 @@ const HTML = (port: number) => `<!DOCTYPE html>
 export function startVmixOutput(): number {
   if (isRunning) return PORT
 
-  httpServer = createServer((_req, res) => {
+  httpServer = createServer((req, res) => {
+    if (handleDataSource(req, res)) return
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
     res.end(HTML(PORT))
   })
