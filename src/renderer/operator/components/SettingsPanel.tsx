@@ -6,6 +6,11 @@ interface Props {
   onThemeChange: (theme: ProjectorTheme) => void
 }
 
+// The output folder is an OS path shown back to the operator, so it has to use the
+// host's separator — a forward slash in a path they paste into vMix on Windows reads
+// as a typo and gets "corrected".
+const PATH_SEP = navigator.userAgent.includes('Windows') ? '\\' : '/'
+
 interface DownloadStatus {
   downloaded: number
   total: number
@@ -26,9 +31,15 @@ export default function SettingsPanel({ theme, onThemeChange }: Props) {
   const [modelProgress, setModelProgress] = useState<{ file: string; progress: number } | null>(null)
   const [vmixRunning, setVmixRunning] = useState(false)
   const [vmixPort, setVmixPort] = useState(7788)
+  const [fileOutRunning, setFileOutRunning] = useState(false)
+  const [fileOutDir, setFileOutDir] = useState('')
 
   useEffect(() => {
     window.api.vmixStatus().then(({ running }) => setVmixRunning(running))
+    window.api.fileOutStatus().then(({ running, dir }) => {
+      setFileOutRunning(running)
+      setFileOutDir(dir)
+    })
   }, [])
 
   const toggleVmix = async () => {
@@ -40,6 +51,14 @@ export default function SettingsPanel({ theme, onThemeChange }: Props) {
       setVmixPort(port)
       setVmixRunning(true)
     }
+  }
+
+  const toggleFileOut = async () => {
+    const { running, dir } = fileOutRunning
+      ? await window.api.fileOutStop()
+      : await window.api.fileOutStart()
+    setFileOutRunning(running)
+    setFileOutDir(dir)
   }
 
   useEffect(() => {
@@ -532,6 +551,79 @@ export default function SettingsPanel({ theme, onThemeChange }: Props) {
           {!vmixRunning && (
             <p className="text-slate-600 text-xs">
               Enable to expose the projector view on your local network. vMix adds it as a live web source — no NDI SDK required.
+            </p>
+          )}
+        </div>
+      </section>
+
+      {/* vMix File Output — data1.xml + image1.png on disk */}
+      <section className="mt-2">
+        <div className="px-5 pb-5">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-white text-sm font-medium">vMix File Output</p>
+              <p className="text-slate-500 text-xs mt-0.5">Write data1.xml + image1.png to a folder vMix reads directly</p>
+            </div>
+            <button
+              onClick={toggleFileOut}
+              className={`relative w-11 h-6 rounded-full transition-colors ${fileOutRunning ? 'bg-orange-500' : 'bg-[#333338]'}`}
+            >
+              <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${fileOutRunning ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          {fileOutRunning && (
+            <div className="bg-[#0e0e11] border border-orange-500/30 rounded-xl p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+                <span className="text-orange-400 text-xs font-medium">Writing on every display change</span>
+              </div>
+
+              <div>
+                <p className="text-slate-400 text-xs mb-1.5">Point the vMix data source at this file:</p>
+                <div className="flex items-center gap-2 bg-[#1a1a1e] border border-[#333338] rounded-lg px-3 py-2">
+                  <code className="text-orange-300 text-xs flex-1 select-all break-all">{fileOutDir}{PATH_SEP}data1.xml</code>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(`${fileOutDir}${PATH_SEP}data1.xml`)}
+                    className="text-slate-500 hover:text-white text-xs transition-colors shrink-0"
+                    title="Copy path"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => window.api.fileOutReveal()}
+                  className="px-3 py-1.5 bg-[#1e1e22] hover:bg-[#2a2a2f] border border-[#333338] text-slate-300 text-xs rounded-lg transition-colors"
+                >
+                  Open Folder
+                </button>
+                <button
+                  onClick={async () => {
+                    const { dir } = await window.api.fileOutChooseDir()
+                    setFileOutDir(dir)
+                  }}
+                  className="px-3 py-1.5 bg-[#1e1e22] hover:bg-[#2a2a2f] border border-[#333338] text-slate-300 text-xs rounded-lg transition-colors"
+                >
+                  Change Folder…
+                </button>
+              </div>
+
+              <div className="text-slate-600 text-[10px] space-y-0.5">
+                <p>1. vMix → <strong className="text-slate-500">Settings → Data Sources → Add → XML</strong></p>
+                <p>2. Browse to the path above → set XPath <strong className="text-slate-500">/display</strong> → refresh 500ms</p>
+                <p>3. Add the title: <strong className="text-slate-500">Add Input → Title</strong> → pick a .xaml from the vmix folder</p>
+                <p>4. Bind each title field to the matching XML field</p>
+                <p className="pt-1">image1.png is the projector rendered as a picture — use it as a vMix image source for an exact match.</p>
+              </div>
+            </div>
+          )}
+
+          {!fileOutRunning && (
+            <p className="text-slate-600 text-xs">
+              For when vMix runs on this same machine — no network, no ports. vMix reads the files off disk, the way BibleShow works.
             </p>
           )}
         </div>

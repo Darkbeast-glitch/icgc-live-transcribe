@@ -136,9 +136,9 @@ const TYPED_REGEX = new RegExp(
   'gi'
 )
 
-// ── Pattern 2: "verse" keyword — "John chapter 3 verse 16", "John 3 verse 16-18"
+// ── Pattern 2: "verse" keyword — "John chapter 3 verse 16", "John 3 the verse 48"
 const SPOKEN_VERSE_REGEX = new RegExp(
-  `\\b${BOOK_RE}\\s*(?:chapters?\\s*)?(\\d{1,3})\\s+verses?\\s+${VERSE_RANGE}`,
+  `\\b${BOOK_RE}\\s*(?:chapters?\\s*)?(\\d{1,3})\\s+(?:the\\s+)?verses?\\s+${VERSE_RANGE}`,
   'gi'
 )
 
@@ -156,10 +156,10 @@ const BOOK_OF_REGEX = new RegExp(
   'gi'
 )
 
-// ── Pattern 5: Chapter-only — "turn to Romans 8", "open Matthew 14"
+// ── Pattern 5: Chapter-only — "turn to Romans 8", "according to Matthew 14"
 //   Only fires when preceded by a navigation word to reduce false positives
 const CHAPTER_ONLY_REGEX = new RegExp(
-  `\\b(?:turn\\s+to|open|read|go\\s+to|look\\s+at|in|from|see)\\s+(?:the\\s+book\\s+of\\s+)?${BOOK_RE}\\s*(?:chapters?\\s*)?(\\d{1,3})\\b(?!\\s*[:\\d])`,
+  `\\b(?:turn\\s+to|open|read|go\\s+to|look\\s+at|according\\s+to|in|from|see)\\s+(?:the\\s+book\\s+of\\s+)?${BOOK_RE}\\s*(?:chapters?\\s*)?(\\d{1,3})\\b(?!\\s*[:\\d])`,
   'gi'
 )
 
@@ -197,7 +197,8 @@ function makeChapterResult(bookRaw: string, chStr: string, raw: string): Detecte
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export function detectScriptures(rawText: string): DetectedScripture[] {
-  const text = wordsToDigits(rawText)
+  // Strip possessive 's ("Mark's 6" → "Mark 6") — common in Ghanaian preaching style
+  const text = wordsToDigits(rawText.replace(/[''']s\b/g, ''))
   const results: DetectedScripture[] = []
   const seen = new Set<string>()
 

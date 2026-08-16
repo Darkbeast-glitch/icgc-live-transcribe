@@ -36,10 +36,11 @@ export default function App() {
   const [translation, setTranslation] = useState('KJV')
   const [theme, setTheme] = useState<ProjectorTheme>(loadSavedTheme)
   const [sessionSeconds, setSessionSeconds] = useState(0)
-  const [goLive, setGoLive] = useState(true)
   const [bottomTab, setBottomTab] = useState<BottomTab>('bible')
   const [showSettings, setShowSettings] = useState(false)
   const [showTimer, setShowTimer] = useState(false)
+  const settingsModalRef = useRef<HTMLDivElement>(null)
+  const settingsTriggerRef = useRef<HTMLElement | null>(null)
 
   // Display state
   const [nowShowing, setNowShowing] = useState<ActiveDisplay>(BLANK)
@@ -59,8 +60,11 @@ export default function App() {
   // Active verse for chapter browser sync
   const [activeVerse, setActiveVerse] = useState<{ book: string; chapter: number; verse: number } | null>(null)
 
-  // Coords of whatever verse is currently live — used to auto-switch translation
+  // Coords of whatever verse is currently live — used to auto-switch translation.
+  // Mirrored into state so the next/previous controls can enable themselves; the ref
+  // is what the translation effect reads, so it stays off that effect's dep list.
   const liveVerseRef = useRef<{ book: string; chapter: number; verse: number } | null>(null)
+  const [liveVerse, setLiveVerse] = useState<{ book: string; chapter: number; verse: number } | null>(null)
 
   // Session timer
   useEffect(() => {
@@ -123,6 +127,7 @@ export default function App() {
     window.api.addHistory({ type: 'verse', reference: item.reference, content: item.text, translation: item.translation })
 
     liveVerseRef.current = { book: item.book, chapter: item.chapter, verse: item.verse }
+    setLiveVerse({ book: item.book, chapter: item.chapter, verse: item.verse })
 
     const display: ActiveDisplay = {
       type: 'verse',
@@ -135,6 +140,56 @@ export default function App() {
     setNowShowingId(item.id)
     setActiveVerse({ book: item.book, chapter: item.chapter, verse: item.verse })
   }, [])
+
+  // Advance the live verse by one, rolling over chapter boundaries so reading a
+  // passage straight through never needs the operator to go find the next chapter.
+  // Operates on whatever is live — not on the browser's selection — so it stays
+  // predictable while the operator is looking somewhere else.
+  const stepVerse = useCallback(async (delta: number) => {
+    const cur = liveVerseRef.current
+    if (!cur) return
+
+    const target = cur.verse + delta
+    if (target >= 1) {
+      const res = await window.api.getVerse({ book: cur.book, chapter: cur.chapter, verse: target, translation })
+      if (res.success && res.text) {
+        presentItem({
+          id: genId(), reference: res.reference!, book: cur.book, chapter: cur.chapter,
+          verse: target, text: res.text, translation: res.translation!, source: 'manual',
+        })
+        return
+      }
+    }
+
+    // Past the end (or before the start) of the chapter — roll into the neighbour.
+    const nextChapter = cur.chapter + (delta > 0 ? 1 : -1)
+    if (nextChapter < 1) return
+
+    const chap = await window.api.getChapter({ book: cur.book, chapter: nextChapter, translation })
+    if (!chap.success || !chap.verses?.length) return
+
+    const landing = delta > 0 ? chap.verses[0] : chap.verses[chap.verses.length - 1]
+    const res = await window.api.getVerse({ book: cur.book, chapter: nextChapter, verse: landing.verse, translation })
+    if (!res.success || !res.text) return
+
+    presentItem({
+      id: genId(), reference: res.reference!, book: cur.book, chapter: nextChapter,
+      verse: landing.verse, text: res.text, translation: res.translation!, source: 'manual',
+    })
+  }, [translation, presentItem])
+
+  // Keyboard: ← → step the live verse, but only when the operator isn't typing.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (showSettings) return
+      const el = e.target as HTMLElement | null
+      if (el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)) return
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); void stepVerse(1) }
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); void stepVerse(-1) }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [stepVerse, showSettings])
 
   const previewItem = useCallback((item: QueueItem) => {
     pendingPreviewRef.current = item
@@ -180,6 +235,7 @@ export default function App() {
   const handleClear = useCallback(() => {
     window.api.clearDisplay()
     liveVerseRef.current = null
+    setLiveVerse(null)
     setNowShowing(BLANK)
     setProgramPreview(BLANK)
     setNowShowingId(null)
@@ -187,6 +243,40 @@ export default function App() {
   }, [])
 
   const handleThemeChange = useCallback((t: ProjectorTheme) => setTheme(t), [])
+
+  const openSettings = useCallback(() => {
+    settingsTriggerRef.current = document.activeElement as HTMLElement
+    setShowSettings(true)
+  }, [])
+
+  const closeSettings = useCallback(() => {
+    setShowSettings(false)
+    settingsTriggerRef.current?.focus()
+  }, [])
+
+  // Settings modal: Escape to close + focus trap
+  useEffect(() => {
+    if (!showSettings) return
+    const modal = settingsModalRef.current
+    const firstFocusable = modal?.querySelector<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )
+    firstFocusable?.focus()
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { closeSettings(); return }
+      if (e.key !== 'Tab' || !modal) return
+      const focusable = Array.from(modal.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ))
+      if (focusable.length === 0) return
+      const first = focusable[0], last = focusable[focusable.length - 1]
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [showSettings, closeSettings])
 
   const handleDisplayFromSong = useCallback((info: { type: 'lyrics'; label: string }) => {
     setNowShowing({ type: 'lyrics', lyrics: { title: info.label, lines: [] } })
@@ -203,13 +293,13 @@ export default function App() {
   ]
 
   return (
-    <div className="flex flex-col h-screen bg-[#0c0c0f] text-white">
+    <div className="flex flex-col h-screen text-white">
       {/* Top bar */}
       <TopBar
         sessionSeconds={sessionSeconds}
         translation={translation}
         onTranslationChange={setTranslation}
-        onSettingsClick={() => setShowSettings(true)}
+        onSettingsClick={openSettings}
         onClear={handleClear}
       />
 
@@ -221,10 +311,9 @@ export default function App() {
         {/* Left + Center column */}
         <div className="flex flex-col flex-1 min-w-0">
           {/* Top row: transcript + preview panels */}
-          <div className="flex border-b border-[#252528]" style={{ height: '260px' }}>
+          <div className="flex border-b border-[#252528]" style={{ height: 'min(260px, 32vh)', minHeight: '200px' }}>
             <TranscriptPanel
               translation={translation}
-              goLive={goLive}
               onPresent={presentItem}
               onPreview={previewItem}
               onAddToQueue={addToQueue}
@@ -234,8 +323,8 @@ export default function App() {
               nowShowing={nowShowing}
               programPreview={programPreview}
               theme={theme}
-              goLive={goLive}
-              onGoLiveToggle={() => setGoLive((v) => !v)}
+              canStepVerse={liveVerse !== null}
+              onStepVerse={stepVerse}
               onTakeLive={handleTakeLive}
             />
           </div>
@@ -243,10 +332,14 @@ export default function App() {
           {/* Bottom: tabs + content */}
           <div className="flex flex-col flex-1 min-h-0">
             {/* Tab bar */}
-            <div className="flex items-center gap-0 border-b border-[#252528] bg-[#0e0e11] shrink-0">
+            <div role="tablist" aria-label="Content panels" className="flex items-center gap-0 border-b border-[#252528] bg-[#0e0e11] shrink-0">
               {BOTTOM_TABS.map((tab) => (
                 <button
                   key={tab.id}
+                  role="tab"
+                  id={`tab-${tab.id}`}
+                  aria-selected={bottomTab === tab.id}
+                  aria-controls={`tabpanel-${tab.id}`}
                   onClick={() => setBottomTab(tab.id)}
                   className={`px-4 py-2.5 text-xs font-medium transition-colors border-b-2 ${
                     bottomTab === tab.id
@@ -260,8 +353,10 @@ export default function App() {
               <div className="flex-1" />
               <button
                 onClick={() => setShowTimer((v) => !v)}
+                aria-label={showTimer ? 'Hide timer' : 'Show timer'}
+                aria-pressed={showTimer}
                 className={`px-3 py-2 text-xs mr-2 rounded transition-colors ${
-                  showTimer ? 'text-green-400' : 'text-slate-600 hover:text-slate-400'
+                  showTimer ? 'text-green-400' : 'text-slate-500 hover:text-slate-400'
                 }`}
               >
                 ⏱ Timer
@@ -269,7 +364,12 @@ export default function App() {
             </div>
 
             {/* Tab content */}
-            <div className="flex-1 min-h-0 overflow-hidden">
+            <div
+              role="tabpanel"
+              id={`tabpanel-${bottomTab}`}
+              aria-labelledby={`tab-${bottomTab}`}
+              className="flex-1 min-h-0 overflow-hidden"
+            >
               {bottomTab === 'bible' && (
                 <ChapterBrowser
                   translation={translation}
@@ -339,11 +439,23 @@ export default function App() {
       {/* Settings modal */}
       {showSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/70" onClick={() => setShowSettings(false)} />
-          <div className="relative bg-[#111113] border border-[#333338] rounded-2xl w-[640px] max-h-[80vh] overflow-y-auto shadow-2xl">
+          <div className="absolute inset-0 bg-black/70" onClick={closeSettings} aria-hidden="true" />
+          <div
+            ref={settingsModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-title"
+            className="relative bg-[#111113] border border-[#252528] rounded-xl w-[640px] max-h-[80vh] overflow-y-auto"
+          >
             <div className="flex items-center justify-between px-5 py-4 border-b border-[#252528]">
-              <h2 className="text-white font-semibold">Settings</h2>
-              <button onClick={() => setShowSettings(false)} className="text-slate-500 hover:text-white text-xl">✕</button>
+              <h2 id="settings-title" className="text-white font-semibold">Settings</h2>
+              <button
+                onClick={closeSettings}
+                aria-label="Close settings"
+                className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-white rounded transition-colors"
+              >
+                ✕
+              </button>
             </div>
             <SettingsPanel theme={theme} onThemeChange={handleThemeChange} />
           </div>

@@ -13,6 +13,9 @@ interface SlotContent {
 
 const BLANK_SLOT: SlotContent = { mode: 'verse' } // placeholder, never rendered when mode=blank
 
+const prefersReducedMotion = () =>
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
 export default function ProjectorApp() {
   const [theme, setTheme] = useState<ProjectorTheme>(buildTheme('classic', 'md'))
   const [slotA, setSlotA] = useState<SlotContent>(BLANK_SLOT)
@@ -113,7 +116,7 @@ export default function ProjectorApp() {
       {/* Crossfade content slots (hidden when timer is active) */}
       <div
         className="absolute inset-0"
-        style={{ opacity: timer !== null ? 0 : 1, transition: 'opacity 400ms ease' }}
+        style={{ opacity: timer !== null ? 0 : 1, transition: prefersReducedMotion() ? 'none' : 'opacity 400ms ease' }}
       >
         {(['A', 'B'] as const).map((slot) => {
           const content = slot === 'A' ? slotA : slotB
@@ -123,7 +126,8 @@ export default function ProjectorApp() {
               className="absolute inset-0 flex items-center justify-center"
               style={{
                 opacity: active === slot && contentMode !== 'blank' ? 1 : 0,
-                transition: 'opacity 600ms ease-in-out',
+                transition: prefersReducedMotion() ? 'none' : 'opacity 600ms ease-in-out',
+                willChange: 'opacity',
                 pointerEvents: 'none',
               }}
             >

@@ -79,6 +79,11 @@ interface Window {
     vmixStart: () => Promise<{ port: number }>
     vmixStop: () => Promise<void>
     vmixStatus: () => Promise<{ running: boolean }>
+    fileOutStatus: () => Promise<{ running: boolean; dir: string }>
+    fileOutStart: () => Promise<{ running: boolean; dir: string }>
+    fileOutStop: () => Promise<{ running: boolean; dir: string }>
+    fileOutChooseDir: () => Promise<{ running: boolean; dir: string }>
+    fileOutReveal: () => Promise<void>
   }
 
   projector: {

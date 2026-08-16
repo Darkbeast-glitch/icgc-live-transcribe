@@ -37,7 +37,7 @@ export default function QueuePanel({
 
         <div className="overflow-y-auto min-h-0">
           {queue.length === 0 ? (
-            <p className="text-slate-700 text-xs text-center py-6 px-3">
+            <p className="text-slate-500 text-xs text-center py-6 px-3">
               Add verses here to run through them in order
             </p>
           ) : (
@@ -67,15 +67,15 @@ export default function QueuePanel({
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); onPresent(item) }}
-                    title="Present live"
-                    className="w-6 h-6 flex items-center justify-center bg-orange-500 hover:bg-orange-400 text-white rounded text-[10px] transition-colors shrink-0"
+                    aria-label={`Present ${item.reference} live`}
+                    className="w-8 h-8 flex items-center justify-center bg-orange-500 hover:bg-orange-400 text-white rounded text-[10px] transition-colors shrink-0"
                   >
                     ▶
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); onRemove(item.id) }}
-                    title="Remove from queue"
-                    className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-red-400 transition-colors shrink-0 text-xs"
+                    aria-label={`Remove ${item.reference} from queue`}
+                    className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-400 transition-colors shrink-0 text-xs"
                   >
                     ✕
                   </button>
@@ -99,7 +99,7 @@ export default function QueuePanel({
 
         <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-0">
           {recentDetections.length === 0 && (
-            <p className="text-slate-700 text-xs text-center py-6">
+            <p className="text-slate-500 text-xs text-center py-6">
               Verses detected in live transcript will appear here
             </p>
           )}

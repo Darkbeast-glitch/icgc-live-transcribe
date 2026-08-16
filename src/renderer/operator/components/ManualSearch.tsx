@@ -53,6 +53,12 @@ function BookAutocomplete({ value, onChange }: { value: string; onChange: (b: st
     if (e.key === 'ArrowDown') { e.preventDefault(); setHighlighted((h) => Math.min(h + 1, suggestions.length - 1)) }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlighted((h) => Math.max(h - 1, 0)) }
     else if (e.key === 'Enter') { e.preventDefault(); if (suggestions[highlighted]) select(suggestions[highlighted]) }
+    else if (e.key === 'Tab' && !e.shiftKey) { if (suggestions[highlighted]) { e.preventDefault(); select(suggestions[highlighted]) } }
+    else if (e.key === 'ArrowRight') {
+      const input = e.currentTarget as HTMLInputElement
+      const atEnd = input.selectionStart === inputVal.length && input.selectionEnd === inputVal.length
+      if (atEnd && suggestions[highlighted]) { e.preventDefault(); select(suggestions[highlighted]) }
+    }
     else if (e.key === 'Escape') setOpen(false)
   }
 
@@ -75,12 +81,12 @@ function BookAutocomplete({ value, onChange }: { value: string; onChange: (b: st
         onFocus={openDropdown}
         onKeyDown={handleKey}
         placeholder="e.g. John"
-        className="w-full bg-slate-700 border border-slate-600 text-white text-sm px-2 py-2 rounded focus:outline-none focus:border-indigo-500"
+        className="w-full bg-[#1e1e22] border border-[#333338] text-white text-sm px-2 py-2 rounded focus:outline-none focus:border-orange-500 placeholder-slate-400"
       />
       {open && suggestions.length > 0 && (
         <ul
           style={dropdownStyle}
-          className="bg-[#1e1e28] border border-slate-600 rounded-lg shadow-xl max-h-56 overflow-y-auto"
+          className="bg-[#1e1e22] border border-[#333338] rounded-lg shadow-xl max-h-56 overflow-y-auto"
         >
           {suggestions.map((b, i) => (
             <li
@@ -88,7 +94,7 @@ function BookAutocomplete({ value, onChange }: { value: string; onChange: (b: st
               onMouseDown={() => select(b)}
               onMouseEnter={() => setHighlighted(i)}
               className={`px-3 py-1.5 text-sm cursor-pointer transition-colors ${
-                i === highlighted ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-slate-700'
+                i === highlighted ? 'bg-orange-500 text-white' : 'text-slate-300 hover:bg-[#2a2a2f]'
               }`}
             >
               {b}
@@ -211,13 +217,13 @@ export default function ManualSearch({ translation, onDisplay }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* Mode toggle */}
-      <div className="flex gap-1 p-3 border-b border-slate-700 shrink-0">
+      <div className="flex gap-1 p-3 border-b border-[#252528] shrink-0">
         <button
           onClick={() => setMode('reference')}
           className={`flex-1 py-1.5 text-sm rounded-lg transition-colors ${
             mode === 'reference'
-              ? 'bg-indigo-600 text-white'
-              : 'text-slate-400 hover:text-white hover:bg-slate-700'
+              ? 'bg-orange-500 text-white'
+              : 'text-slate-400 hover:text-white hover:bg-[#1e1e22]'
           }`}
         >
           By Reference
@@ -226,8 +232,8 @@ export default function ManualSearch({ translation, onDisplay }: Props) {
           onClick={() => setMode('smart')}
           className={`flex-1 py-1.5 text-sm rounded-lg transition-colors ${
             mode === 'smart'
-              ? 'bg-purple-700 text-white'
-              : 'text-slate-400 hover:text-white hover:bg-slate-700'
+              ? 'bg-[#6d28d9] text-white'
+              : 'text-slate-400 hover:text-white hover:bg-[#1e1e22]'
           }`}
         >
           ✨ Smart Search
@@ -243,12 +249,13 @@ export default function ManualSearch({ translation, onDisplay }: Props) {
               value={rawInput}
               onChange={(e) => setRawInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleRawSubmit()}
-              placeholder='Type reference e.g. "Romans 8:28" or "1 Cor 13:4-7" then Enter'
-              className="flex-1 bg-slate-700 border border-slate-600 text-white text-sm px-3 py-2 rounded focus:outline-none focus:border-indigo-500 placeholder-slate-500"
+              aria-label="Scripture reference"
+              placeholder='e.g. "Romans 8:28" or "1 Cor 13:4-7" then Enter'
+              className="flex-1 bg-[#1e1e22] border border-[#333338] text-white text-sm px-3 py-2 rounded focus:outline-none focus:border-orange-500 placeholder-slate-400"
             />
             <button
               onClick={handleRawSubmit}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded transition-colors"
+              className="px-4 py-2 bg-orange-500 hover:bg-orange-400 text-white text-sm rounded transition-colors"
             >
               Go
             </button>
@@ -262,12 +269,12 @@ export default function ManualSearch({ translation, onDisplay }: Props) {
             <div>
               <label className="text-slate-400 text-xs mb-1 block">Chapter</label>
               <input type="number" min="1" value={chapter} onChange={(e) => setChapter(e.target.value)}
-                className="w-full bg-slate-700 border border-slate-600 text-white text-sm px-2 py-2 rounded focus:outline-none focus:border-indigo-500" />
+                className="w-full bg-[#1e1e22] border border-[#333338] text-white text-sm px-2 py-2 rounded focus:outline-none focus:border-orange-500" />
             </div>
             <div>
               <label className="text-slate-400 text-xs mb-1 block">Verse</label>
               <input type="number" min="1" value={verse} onChange={(e) => setVerse(e.target.value)}
-                className="w-full bg-slate-700 border border-slate-600 text-white text-sm px-2 py-2 rounded focus:outline-none focus:border-indigo-500" />
+                className="w-full bg-[#1e1e22] border border-[#333338] text-white text-sm px-2 py-2 rounded focus:outline-none focus:border-orange-500" />
             </div>
           </div>
 
@@ -275,13 +282,13 @@ export default function ManualSearch({ translation, onDisplay }: Props) {
             <label className="text-slate-400 text-xs">To verse (optional range):</label>
             <input type="number" min="1" value={verseEnd} onChange={(e) => setVerseEnd(e.target.value)}
               placeholder="e.g. 20"
-              className="w-24 bg-slate-700 border border-slate-600 text-white text-sm px-2 py-1.5 rounded focus:outline-none focus:border-indigo-500" />
+              className="w-24 bg-[#1e1e22] border border-[#333338] text-white text-sm px-2 py-1.5 rounded focus:outline-none focus:border-orange-500" />
           </div>
 
           <button
             onClick={() => doSearch(book, chapter, verse, verseEnd)}
             disabled={loading}
-            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium text-sm rounded transition-colors"
+            className="w-full py-2.5 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-white font-medium text-sm rounded transition-colors"
           >
             {loading ? 'Fetching...' : `Show on Projector (${translation})`}
           </button>
@@ -289,10 +296,10 @@ export default function ManualSearch({ translation, onDisplay }: Props) {
           {result && (
             <div className="mt-4">
               {result.success ? (
-                <div className="p-4 bg-slate-800 border border-slate-600 rounded-lg">
+                <div className="p-4 bg-[#161619] border border-[#333338] rounded-lg">
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="text-white font-semibold">{result.reference}</h3>
-                    <span className="text-indigo-400 text-xs">{result.translation}</span>
+                    <span className="text-orange-400 text-xs">{result.translation}</span>
                   </div>
                   <p className="text-slate-300 text-sm leading-relaxed">{result.text}</p>
                   <p className="text-green-400 text-xs mt-3">✓ Sent to projector</p>
@@ -311,7 +318,7 @@ export default function ManualSearch({ translation, onDisplay }: Props) {
       {/* ── Smart Search mode ── */}
       {mode === 'smart' && (
         <div className="flex flex-col h-full overflow-hidden">
-          <div className="p-4 border-b border-slate-700 shrink-0">
+          <div className="p-4 border-b border-[#252528] shrink-0">
             {notIndexed && (
               <div className="mb-3 p-3 bg-amber-900/40 border border-amber-700/60 rounded-lg text-amber-300 text-xs">
                 No verses indexed yet. Go to <strong>Settings → Semantic Verse Index → Build Index</strong> to enable Smart Search.
@@ -322,19 +329,20 @@ export default function ManualSearch({ translation, onDisplay }: Props) {
                 value={smartQuery}
                 onChange={(e) => setSmartQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && doSmartSearch()}
-                placeholder='e.g. "God so loved the world" or "I can do all things" or "faith without works"'
-                className="flex-1 bg-slate-700 border border-slate-600 text-white text-sm px-3 py-2 rounded focus:outline-none focus:border-purple-500 placeholder-slate-500"
+                aria-label="Smart search query"
+                placeholder='e.g. "God so loved the world" or "faith without works"'
+                className="flex-1 bg-[#1e1e22] border border-[#333338] text-white text-sm px-3 py-2 rounded focus:outline-none focus:border-[#7c3aed] placeholder-slate-400"
               />
               <button
                 onClick={doSmartSearch}
                 disabled={smartLoading || !smartQuery.trim()}
-                className="px-4 py-2 bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white text-sm rounded transition-colors"
+                className="px-4 py-2 bg-[#6d28d9] hover:bg-[#7c3aed] disabled:opacity-50 text-white text-sm rounded transition-colors"
               >
                 {smartLoading ? '...' : 'Search'}
               </button>
             </div>
             {smartStatus && (
-              <p className="text-slate-600 text-xs mt-2">
+              <p className="text-slate-400 text-xs mt-2">
                 {smartStatus.indexed.toLocaleString()} verses indexed (KJV)
                 {!smartStatus.modelReady && smartLoading && ' · Loading AI model for first time…'}
               </p>
@@ -362,11 +370,11 @@ export default function ManualSearch({ translation, onDisplay }: Props) {
             )}
 
             {!smartLoading && smartResults.length === 0 && !smartError && smartQuery && (
-              <p className="text-slate-600 text-sm text-center py-8">No results</p>
+              <p className="text-slate-400 text-sm text-center py-8">No results</p>
             )}
 
             {!smartLoading && smartResults.length === 0 && !smartQuery && (
-              <p className="text-slate-600 text-sm text-center py-8">
+              <p className="text-slate-400 text-sm text-center py-8">
                 Type a phrase or paraphrase above and press Search
               </p>
             )}
@@ -377,7 +385,7 @@ export default function ManualSearch({ translation, onDisplay }: Props) {
                 <button
                   key={i}
                   onClick={() => showSmartResult(r)}
-                  className="w-full text-left p-3 bg-slate-800/60 hover:bg-purple-900/20 border border-slate-700 hover:border-purple-500/50 rounded-xl transition-colors group"
+                  className="w-full text-left p-3 bg-[#161619] hover:bg-[#6d28d9]/10 border border-[#333338] hover:border-[#6d28d9]/50 rounded-xl transition-colors group"
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-white text-sm font-semibold">{r.reference}</span>
@@ -389,8 +397,8 @@ export default function ManualSearch({ translation, onDisplay }: Props) {
                           style={{ width: `${pct}%` }}
                         />
                       </div>
-                      <span className="text-slate-500 text-xs w-8 text-right">{pct}%</span>
-                      <span className="text-slate-600 group-hover:text-purple-400 text-xs transition-colors">→</span>
+                      <span className="text-slate-400 text-xs w-8 text-right">{pct}%</span>
+                      <span className="text-slate-500 group-hover:text-[#7c3aed] text-xs transition-colors">→</span>
                     </div>
                   </div>
                   <p className="text-slate-300 text-xs leading-relaxed line-clamp-3">{r.text}</p>

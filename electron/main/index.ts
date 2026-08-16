@@ -9,6 +9,7 @@ import { setupExportHandlers } from './handlers/export'
 import { setupSemanticHandlers } from './handlers/semantic'
 import { setupWhisperHandlers } from './handlers/whisper'
 import { broadcast, startVmixOutput, stopVmixOutput, isVmixOutputRunning } from './handlers/vmix-output'
+import { setupFileOutputHandlers, writeFileOutput } from './handlers/file-output'
 
 // Window-capture tools (vMix, OBS, NDI Tools) often show a black/frozen image for
 // GPU-compositied Electron windows. Disabling hardware acceleration makes the
@@ -90,16 +91,19 @@ function createProjectorWindow(): void {
 ipcMain.on('display:show-verse', (_event, data) => {
   projectorWindow?.webContents.send('display:show-verse', data)
   broadcast('verse', data)
+  writeFileOutput()
 })
 
 ipcMain.on('display:show-lyrics', (_event, data) => {
   projectorWindow?.webContents.send('display:show-lyrics', data)
   broadcast('lyrics', data)
+  writeFileOutput()
 })
 
 ipcMain.on('display:clear', () => {
   projectorWindow?.webContents.send('display:clear')
   broadcast('clear')
+  writeFileOutput()
 })
 
 ipcMain.on('projector:toggle-fullscreen', () => {
@@ -124,11 +128,13 @@ ipcMain.on('display:clear-timer', () => {
 ipcMain.on('display:show-image', (_event, data: { src: string; caption?: string; fit?: 'contain' | 'cover' }) => {
   projectorWindow?.webContents.send('display:show-image', data)
   broadcast('clear') // images are local files, can't stream via web
+  writeFileOutput() // the PNG capture still carries the image to vMix
 })
 
 ipcMain.on('display:show-note', (_event, data: { heading?: string; html: string }) => {
   projectorWindow?.webContents.send('display:show-note', data)
   broadcast('note', data)
+  writeFileOutput()
 })
 
 // vMix output control
@@ -177,6 +183,7 @@ app.whenReady().then(async () => {
   setupExportHandlers()
   setupSemanticHandlers(join(app.getPath('userData'), 'model-cache'))
   setupWhisperHandlers(join(app.getPath('userData'), 'model-cache'))
+  setupFileOutputHandlers(() => projectorWindow)
 
   createOperatorWindow()
   createProjectorWindow()

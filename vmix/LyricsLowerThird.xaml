@@ -1,0 +1,79 @@
+<Canvas xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="1920" Height="1080" Background="Transparent">
+
+  <!-- ================================================================
+       ICGC FMT Live Word — Lyrics lower third for vMix
+       Data source: http://localhost:7788/current.xml   (XPath: /display)
+
+       Field mapping (vMix Title editor → Data Source column):
+         Line1        → line1         first lyric line
+         Line2        → line2         second lyric line
+         SongTitle    → title         song title
+         Artist       → artist        artist name
+
+       Two discrete lines are used rather than one wrapping block so the
+       lines break where the songwriter wrote them, not where the box ends.
+       ================================================================ -->
+
+  <Border Canvas.Left="140" Canvas.Top="768"
+          Width="1640" Height="212"
+          CornerRadius="10"
+          Background="#E60E0E11"
+          BorderBrush="#33333338" BorderThickness="1">
+    <Border.Effect>
+      <DropShadowEffect Color="#000000" BlurRadius="36" ShadowDepth="0" Opacity="0.65"/>
+    </Border.Effect>
+  </Border>
+
+  <Border Canvas.Left="140" Canvas.Top="768"
+          Width="8" Height="212"
+          CornerRadius="10,0,0,10"
+          Background="#F97316"/>
+
+  <!-- Lyric lines — centred, the reading surface -->
+  <TextBlock x:Name="Line1"
+             Canvas.Left="188" Canvas.Top="792"
+             Width="1552"
+             TextAlignment="Center"
+             FontFamily="Segoe UI Semibold" FontSize="48"
+             Foreground="#FFFFFF"
+             TextTrimming="CharacterEllipsis"
+             Text="Amazing grace how sweet the sound">
+    <TextBlock.Effect>
+      <DropShadowEffect Color="#000000" BlurRadius="10" ShadowDepth="0" Opacity="0.8"/>
+    </TextBlock.Effect>
+  </TextBlock>
+
+  <TextBlock x:Name="Line2"
+             Canvas.Left="188" Canvas.Top="852"
+             Width="1552"
+             TextAlignment="Center"
+             FontFamily="Segoe UI Semibold" FontSize="48"
+             Foreground="#FFFFFF"
+             TextTrimming="CharacterEllipsis"
+             Text="That saved a wretch like me">
+    <TextBlock.Effect>
+      <DropShadowEffect Color="#000000" BlurRadius="10" ShadowDepth="0" Opacity="0.8"/>
+    </TextBlock.Effect>
+  </TextBlock>
+
+  <!-- Attribution strip -->
+  <TextBlock x:Name="SongTitle"
+             Canvas.Left="188" Canvas.Top="928"
+             Width="1000"
+             FontFamily="Segoe UI" FontSize="26"
+             Foreground="#F97316"
+             TextTrimming="CharacterEllipsis"
+             Text="Amazing Grace"/>
+
+  <TextBlock x:Name="Artist"
+             Canvas.Left="1240" Canvas.Top="928"
+             Width="500"
+             TextAlignment="Right"
+             FontFamily="Segoe UI" FontSize="26"
+             Foreground="#94A3B8"
+             TextTrimming="CharacterEllipsis"
+             Text="Traditional"/>
+
+</Canvas>

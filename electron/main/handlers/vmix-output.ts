@@ -13,9 +13,12 @@ let lastState: { type: string; data?: unknown } = { type: 'clear' }
 let lastTheme: unknown = null
 
 export function broadcast(type: string, data?: unknown) {
-  if (!isRunning) return
+  // Track state even when the web server is stopped — the file output reads it
+  // independently, and it also seeds clients that connect later.
   if (type !== 'theme') lastState = { type, data }
   else lastTheme = data
+
+  if (!isRunning) return
   const msg = JSON.stringify({ type, data })
   for (const ws of clients) {
     if (ws.readyState === WebSocket.OPEN) ws.send(msg)
@@ -28,7 +31,7 @@ function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-function buildXml(): string {
+export function buildXml(): string {
   const { type, data } = lastState
   const d = data as Record<string, unknown> | undefined
   const lines: string[] = ['<?xml version="1.0" encoding="utf-8"?>', '<display>']

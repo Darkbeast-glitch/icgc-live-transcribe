@@ -7,8 +7,8 @@ interface Props {
   nowShowing: ActiveDisplay
   programPreview: ActiveDisplay
   theme: ProjectorTheme
-  goLive: boolean
-  onGoLiveToggle: () => void
+  canStepVerse: boolean
+  onStepVerse: (delta: number) => void
   onTakeLive: () => void
 }
 
@@ -156,7 +156,7 @@ function ExpandedModal({ display, theme, label, onClose }: {
   )
 }
 
-export default function PreviewPanel({ nowShowing, programPreview, theme, goLive, onGoLiveToggle, onTakeLive }: Props) {
+export default function PreviewPanel({ nowShowing, programPreview, theme, canStepVerse, onStepVerse, onTakeLive }: Props) {
   const hasProgramPreview = programPreview.type !== 'blank'
   const [expanded, setExpanded] = useState<'program' | 'live' | null>(null)
 
@@ -167,7 +167,7 @@ export default function PreviewPanel({ nowShowing, programPreview, theme, goLive
         <div className="flex flex-col flex-1 min-w-0">
           <div className="flex items-center justify-between mb-2 px-1">
             <p className="text-slate-500 text-xs">Program preview</p>
-            {hasProgramPreview && !goLive && (
+            {hasProgramPreview && (
               <button
                 onClick={onTakeLive}
                 className="flex items-center gap-1 px-2 py-0.5 bg-orange-500 hover:bg-orange-400 text-white text-[10px] font-semibold rounded transition-colors"
@@ -183,16 +183,21 @@ export default function PreviewPanel({ nowShowing, programPreview, theme, goLive
         <div className="flex flex-col flex-1 min-w-0">
           <div className="flex items-center justify-between mb-2 px-1">
             <p className="text-slate-500 text-xs">Live display</p>
-            <div className="flex items-center gap-2">
-              <span className="text-slate-500 text-[10px] uppercase tracking-wide">Auto-present</span>
+            <div className="flex items-center gap-1">
               <button
-                onClick={onGoLiveToggle}
-                className={`relative w-9 h-5 rounded-full transition-colors ${goLive ? 'bg-green-500' : 'bg-[#333338]'}`}
-              >
-                <span
-                  className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${goLive ? 'translate-x-4' : 'translate-x-0'}`}
-                />
-              </button>
+                onClick={() => onStepVerse(-1)}
+                disabled={!canStepVerse}
+                title="Previous verse (←)"
+                aria-label="Previous verse"
+                className="px-2 py-0.5 bg-[#1e1e22] hover:bg-[#2a2a2f] disabled:opacity-30 disabled:hover:bg-[#1e1e22] border border-[#333338] text-slate-300 text-[10px] rounded transition-colors"
+              >‹ Prev</button>
+              <button
+                onClick={() => onStepVerse(1)}
+                disabled={!canStepVerse}
+                title="Next verse (→)"
+                aria-label="Next verse"
+                className="px-2 py-0.5 bg-[#1e1e22] hover:bg-[#2a2a2f] disabled:opacity-30 disabled:hover:bg-[#1e1e22] border border-[#333338] text-slate-300 text-[10px] rounded transition-colors"
+              >Next ›</button>
             </div>
           </div>
           <MiniScreen display={nowShowing} theme={theme} onExpand={() => setExpanded('live')} />

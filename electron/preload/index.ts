@@ -112,4 +112,9 @@ contextBridge.exposeInMainWorld('api', {
   vmixStart: () => ipcRenderer.invoke('vmix:start'),
   vmixStop: () => ipcRenderer.invoke('vmix:stop'),
   vmixStatus: () => ipcRenderer.invoke('vmix:status'),
+  fileOutStatus: () => ipcRenderer.invoke('fileout:status'),
+  fileOutStart: () => ipcRenderer.invoke('fileout:start'),
+  fileOutStop: () => ipcRenderer.invoke('fileout:stop'),
+  fileOutChooseDir: () => ipcRenderer.invoke('fileout:choose-dir'),
+  fileOutReveal: () => ipcRenderer.invoke('fileout:reveal'),
 })

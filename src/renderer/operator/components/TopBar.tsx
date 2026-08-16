@@ -21,7 +21,7 @@ export default function TopBar({ sessionSeconds, translation, onTranslationChang
     <header className="flex items-center justify-between px-4 h-12 bg-[#111113] border-b border-[#252528] shrink-0">
       {/* Left: logo */}
       <div className="flex items-center gap-2.5 w-52">
-        <div className="w-7 h-7 bg-orange-500 rounded-md flex items-center justify-center text-xs font-black text-white">
+        <div className="w-7 h-7 bg-orange-500 rounded-md flex items-center justify-center text-xs font-black text-white" aria-hidden="true">
           C
         </div>
         <span className="text-white text-sm font-semibold tracking-wide">ICGC FMT</span>
@@ -31,14 +31,16 @@ export default function TopBar({ sessionSeconds, translation, onTranslationChang
       </div>
 
       {/* Center: session time */}
-      <div className="flex items-center gap-2 text-slate-400 text-xs tracking-widest uppercase font-medium">
+      <div className="flex items-center gap-2 text-slate-400 text-xs tracking-widest uppercase font-medium" aria-label="Session time">
         <span>Session Time:</span>
         <span className="text-white font-mono">{fmt(sessionSeconds)}</span>
       </div>
 
       {/* Right: controls */}
       <div className="flex items-center gap-2 w-52 justify-end">
+        <label htmlFor="translation-select" className="sr-only">Bible translation</label>
         <select
+          id="translation-select"
           value={translation}
           onChange={(e) => onTranslationChange(e.target.value)}
           className="bg-[#1e1e22] text-white text-xs rounded px-2 py-1 border border-[#333338] focus:outline-none focus:border-orange-500"
@@ -49,18 +51,21 @@ export default function TopBar({ sessionSeconds, translation, onTranslationChang
         </select>
         <button
           onClick={onClear}
+          aria-label="Clear projector screen"
           className="text-xs px-2.5 py-1 bg-[#1e1e22] hover:bg-red-900/40 border border-[#333338] hover:border-red-700 text-slate-400 hover:text-red-400 rounded transition-colors"
         >
           Clear
         </button>
         <button
           onClick={() => window.api.toggleProjectorFullscreen()}
+          aria-label="Toggle projector fullscreen"
           className="text-xs px-2.5 py-1 bg-[#1e1e22] hover:bg-[#2a2a2f] border border-[#333338] text-slate-400 hover:text-white rounded transition-colors"
         >
           ⛶
         </button>
         <button
           onClick={onSettingsClick}
+          aria-label="Open settings"
           className="text-xs px-2.5 py-1 bg-[#1e1e22] hover:bg-[#2a2a2f] border border-[#333338] text-slate-400 hover:text-white rounded transition-colors"
         >
           ⚙

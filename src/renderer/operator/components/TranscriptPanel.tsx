@@ -10,7 +10,6 @@ interface DetectedVerse {
 
 interface Props {
   translation: string
-  goLive: boolean
   onPresent: (item: QueueItem) => void
   onPreview: (item: QueueItem) => void
   onAddToQueue: (item: QueueItem) => void
@@ -53,7 +52,7 @@ function genId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
 }
 
-export default function TranscriptPanel({ translation, goLive, onPresent, onPreview, onAddToQueue, onDetected }: Props) {
+export default function TranscriptPanel({ translation, onPresent, onPreview, onAddToQueue, onDetected }: Props) {
   const [mode, setMode] = useState<Mode>(() => (localStorage.getItem(MODE_KEY) as Mode) ?? 'online')
 
   // Online (Deepgram) state
@@ -165,9 +164,12 @@ export default function TranscriptPanel({ translation, goLive, onPresent, onPrev
     const entry: DetectedVerse = { scripture, result, id: key }
     setDetected((prev) => [entry, ...prev])
     onDetected(item)
-    if (goLive) onPresent(item)
-    else onPreview(item)
-  }, [translation, goLive, onPresent, onPreview, onDetected])
+    // Detection is an assist, never an override: a reference picked up from speech
+    // lands in the detections list and the preview, and reaches the congregation
+    // only when the operator takes it live. It must never displace scripture the
+    // operator has deliberately put on screen.
+    onPreview(item)
+  }, [translation, onPreview, onDetected])
 
   useEffect(() => { fetchRef.current = fetchVerse }, [fetchVerse])
 
