@@ -12,6 +12,8 @@ interface Props {
 const PATH_SEP = navigator.userAgent.includes('Windows') ? '\\' : '/'
 
 interface DownloadStatus {
+  downloadable?: boolean
+  translation?: string
   downloaded: number
   total: number
   inProgress: boolean
@@ -27,6 +29,8 @@ interface SemanticStatus {
 
 export default function SettingsPanel({ theme, onThemeChange }: Props) {
   const [dlStatus, setDlStatus] = useState<DownloadStatus | null>(null)
+  const [dlTranslation, setDlTranslation] = useState('KJV')
+  const [dlNote, setDlNote] = useState('')
   const [semStatus, setSemStatus] = useState<SemanticStatus | null>(null)
   const [modelProgress, setModelProgress] = useState<{ file: string; progress: number } | null>(null)
   const [vmixRunning, setVmixRunning] = useState(false)
@@ -62,11 +66,19 @@ export default function SettingsPanel({ theme, onThemeChange }: Props) {
   }
 
   useEffect(() => {
-    window.api.getBibleDownloadStatus().then(setDlStatus)
+    window.api.getBibleDownloadStatus({ translation: dlTranslation }).then(setDlStatus)
     window.api.getSemanticStatus().then(setSemStatus)
 
     const offBibleProgress = window.api.onBibleDownloadProgress((data) => {
-      setDlStatus({ downloaded: data.done, total: data.total, inProgress: !data.complete })
+      setDlStatus((prev) => ({
+        ...prev,
+        downloaded: data.done,
+        total: data.total,
+        inProgress: !data.complete,
+        translation: data.translation ?? prev?.translation,
+        downloadable: prev?.downloadable ?? true,
+      }))
+      if (data.complete && data.failed) setDlNote(`${data.failed} chapters failed — they will load on demand.`)
     })
     const offModelProgress = window.api.onSemanticModelProgress((data) => setModelProgress(data))
     const offModelReady = window.api.onSemanticModelReady(() => {
@@ -91,9 +103,20 @@ export default function SettingsPanel({ theme, onThemeChange }: Props) {
     }
   }, [])
 
+  // Re-read status whenever the chosen translation changes
+  useEffect(() => {
+    window.api.getBibleDownloadStatus({ translation: dlTranslation }).then(setDlStatus)
+    setDlNote('')
+  }, [dlTranslation])
+
   const startDownload = async () => {
+    setDlNote('')
     setDlStatus((prev) => (prev ? { ...prev, inProgress: true } : null))
-    window.api.startBibleDownload()
+    const res = await window.api.startBibleDownload({ translation: dlTranslation })
+    if (!res?.started && res?.reason) {
+      setDlNote(res.reason)
+      setDlStatus((prev) => (prev ? { ...prev, inProgress: false } : null))
+    }
   }
 
   const pct = dlStatus ? Math.round((dlStatus.downloaded / dlStatus.total) * 100) : 0
@@ -389,12 +412,37 @@ export default function SettingsPanel({ theme, onThemeChange }: Props) {
         <div className="p-4 bg-slate-800/60 border border-slate-700 rounded-xl space-y-3">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-white text-sm font-medium">Download Full KJV Bible</p>
+              <p className="text-white text-sm font-medium">Download Full Bible</p>
               <p className="text-slate-400 text-xs mt-1">
-                Downloads all 1,189 chapters locally so the app works 100% offline. One-time setup, takes about 3–4 minutes.
+                Downloads all 1,189 chapters locally so lookups never wait on the network.
+                One-time setup, about 3–4 minutes.
               </p>
+              <div className="flex items-center gap-2 mt-2">
+                <select
+                  value={dlTranslation}
+                  onChange={(e) => setDlTranslation(e.target.value)}
+                  disabled={dlStatus?.inProgress}
+                  aria-label="Translation to download"
+                  className="bg-[#1e1e22] text-white text-xs rounded px-2 py-1 border border-[#333338] focus:outline-none focus:border-orange-500 disabled:opacity-50"
+                >
+                  {['KJV', 'WEB', 'ASV', 'YLT', 'DARBY', 'BBE'].map((t) => (
+                    <option key={t} value={t}>{t} — free to store offline</option>
+                  ))}
+                  {['NIV', 'NLT', 'NKJV', 'ESV', 'NASB'].map((t) => (
+                    <option key={t} value={t}>{t} — licensed, cannot download</option>
+                  ))}
+                </select>
+              </div>
+              {dlStatus && !dlStatus.downloadable && (
+                <p className="text-amber-500/90 text-[11px] mt-2 leading-relaxed">
+                  {dlTranslation} is licensed, so it cannot be stored in full — the provider limits
+                  offline copies. Use <strong>Prepare for Service</strong> in the Service Plan tab to
+                  pre-load just the chapters you need.
+                </p>
+              )}
+              {dlNote && <p className="text-amber-500/90 text-[11px] mt-2">{dlNote}</p>}
             </div>
-            {!isComplete && (
+            {!isComplete && dlStatus?.downloadable !== false && (
               <button
                 onClick={startDownload}
                 disabled={dlStatus?.inProgress}
@@ -410,7 +458,7 @@ export default function SettingsPanel({ theme, onThemeChange }: Props) {
               <div className="flex justify-between text-xs text-slate-400 mb-1">
                 <span>
                   {isComplete
-                    ? 'Complete — Bible is fully available offline'
+                    ? `Complete — ${dlStatus.translation ?? dlTranslation} is fully available offline`
                     : dlStatus.inProgress
                       ? `Downloading… ${dlStatus.downloaded} / ${dlStatus.total} chapters`
                       : `${dlStatus.downloaded} / ${dlStatus.total} chapters cached`}

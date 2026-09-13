@@ -4,6 +4,8 @@ export interface VerseResult {
   reference?: string
   translation?: string
   error?: string
+  /** Where the text came from — used to show lookup cost in the operator UI. */
+  source?: 'cache' | 'network'
 }
 
 export interface Song {

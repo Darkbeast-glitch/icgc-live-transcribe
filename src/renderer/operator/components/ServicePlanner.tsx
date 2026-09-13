@@ -60,6 +60,8 @@ function parseSections(lyrics: string): string[][] {
 
 export default function ServicePlanner({ translation, onDisplay }: Props) {
   const [items, setItems] = useState<ServiceItem[]>(loadPlan)
+  const [preloading, setPreloading] = useState<{ done: number; total: number } | null>(null)
+  const [preloadNote, setPreloadNote] = useState('')
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
   const [mode, setMode] = useState<'edit' | 'run'>('edit')
   const [addType, setAddType] = useState<'verse' | 'song'>('verse')
@@ -197,6 +199,38 @@ export default function ServicePlanner({ translation, onDisplay }: Props) {
     })
   }
 
+  // Fetch every chapter this plan touches, before the service starts. For licensed
+  // translations (NIV, NLT, NKJV, ESV) this is the only legitimate way to go offline
+  // — a few named chapters rather than the whole Bible — and it means no planned
+  // passage waits on the church WiFi mid-service.
+  const prepareForService = useCallback(async () => {
+    const chapters = items
+      .filter((it): it is ServiceVerseItem => it.type === 'verse')
+      .map((it) => ({ book: it.book, chapter: it.chapter, translation: it.translation || translation }))
+
+    if (chapters.length === 0) {
+      setPreloadNote('No scripture items in the plan yet.')
+      return
+    }
+
+    setPreloadNote('')
+    setPreloading({ done: 0, total: chapters.length })
+    const off = window.api.onPreloadProgress((p) => setPreloading(p))
+    try {
+      const res = await window.api.preloadChapters(chapters)
+      setPreloadNote(
+        res.failed === 0
+          ? `Ready — ${res.total} chapter${res.total === 1 ? '' : 's'} available offline.`
+          : `${res.total - res.failed} of ${res.total} ready. Could not load: ${res.errors.join(', ')}`
+      )
+    } catch {
+      setPreloadNote('Preload failed — check the connection.')
+    } finally {
+      off()
+      setPreloading(null)
+    }
+  }, [items, translation])
+
   return (
     <div className="flex h-full">
       {/* ── Left: Service list ── */}
@@ -213,6 +247,14 @@ export default function ServicePlanner({ translation, onDisplay }: Props) {
               Edit
             </button>
             <button
+              onClick={prepareForService}
+              disabled={!!preloading}
+              title="Download every chapter in this plan so nothing waits on the network during the service"
+              className="text-xs px-2.5 py-1 rounded transition-colors text-slate-400 hover:text-white disabled:opacity-50"
+            >
+              {preloading ? `${preloading.done}/${preloading.total}…` : '⤓ Prepare'}
+            </button>
+            <button
               onClick={() => { setMode('run'); setActiveIndex(null); setSongSections(null) }}
               className={`text-xs px-2.5 py-1 rounded transition-colors ${
                 mode === 'run' ? 'bg-green-700 text-white' : 'text-slate-400 hover:text-white'
@@ -222,6 +264,10 @@ export default function ServicePlanner({ translation, onDisplay }: Props) {
             </button>
           </div>
         </div>
+
+        {preloadNote && (
+          <p className="px-3 py-1.5 text-[10px] text-slate-400 border-b border-slate-700 shrink-0">{preloadNote}</p>
+        )}
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {items.length === 0 && (

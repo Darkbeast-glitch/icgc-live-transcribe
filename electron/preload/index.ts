@@ -59,8 +59,8 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('bible:get-chapter', params),
 
   // Offline Bible download
-  getBibleDownloadStatus: () => ipcRenderer.invoke('bible:download-status'),
-  startBibleDownload: () => ipcRenderer.invoke('bible:start-download'),
+  getBibleDownloadStatus: (arg?: { translation?: string }) => ipcRenderer.invoke('bible:download-status', arg),
+  startBibleDownload: (arg?: { translation?: string }) => ipcRenderer.invoke('bible:start-download', arg),
   onBibleDownloadProgress: (
     cb: (data: { done: number; total: number; complete?: boolean }) => void
   ) => {
@@ -112,6 +112,13 @@ contextBridge.exposeInMainWorld('api', {
   vmixStart: () => ipcRenderer.invoke('vmix:start'),
   vmixStop: () => ipcRenderer.invoke('vmix:stop'),
   vmixStatus: () => ipcRenderer.invoke('vmix:status'),
+  preloadChapters: (chapters: Array<{ book: string; chapter: number; translation: string }>) =>
+    ipcRenderer.invoke('bible:preload-chapters', { chapters }),
+  onPreloadProgress: (cb: (d: { done: number; total: number }) => void) => {
+    const h = (_e: unknown, d: { done: number; total: number }) => cb(d)
+    ipcRenderer.on('bible:preload-progress', h)
+    return () => ipcRenderer.removeListener('bible:preload-progress', h)
+  },
   fileOutStatus: () => ipcRenderer.invoke('fileout:status'),
   fileOutStart: () => ipcRenderer.invoke('fileout:start'),
   fileOutStop: () => ipcRenderer.invoke('fileout:stop'),

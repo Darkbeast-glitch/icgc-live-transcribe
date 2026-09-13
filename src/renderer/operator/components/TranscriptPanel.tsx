@@ -6,6 +6,10 @@ interface DetectedVerse {
   scripture: DetectedScripture
   result: VerseResult
   id: string
+  /** ms from reference recognised in speech to verse text in hand. */
+  ms: number
+  /** Whether the text came from the local DB or over the network. */
+  source: 'cache' | 'network'
 }
 
 interface Props {
@@ -141,6 +145,7 @@ export default function TranscriptPanel({ translation, onPresent, onPreview, onA
     const key = `${scripture.book}${scripture.chapter}:${scripture.verse}-${translation}`
     if (seenRef.current.has(key)) return
     seenRef.current.add(key)
+    const startedAt = performance.now()
 
     let result: VerseResult
     if (scripture.verseEnd) {
@@ -153,7 +158,12 @@ export default function TranscriptPanel({ translation, onPresent, onPreview, onA
         book: scripture.book, chapter: scripture.chapter, verse: scripture.verse, translation,
       })
     }
-    if (!result.success) return
+    if (!result.success) {
+      // Release the key so a later (or final) mention of the same reference can
+      // retry — a transient network failure must not blacklist the verse.
+      seenRef.current.delete(key)
+      return
+    }
 
     const item: QueueItem = {
       id: genId(), reference: result.reference!, book: scripture.book,
@@ -161,7 +171,9 @@ export default function TranscriptPanel({ translation, onPresent, onPreview, onA
       text: result.text!, translation: result.translation!, source: 'detected',
     }
 
-    const entry: DetectedVerse = { scripture, result, id: key }
+    const ms = Math.round(performance.now() - startedAt)
+    const source = result.source === 'cache' ? 'cache' : 'network'
+    const entry: DetectedVerse = { scripture, result, id: key, ms, source }
     setDetected((prev) => [entry, ...prev])
     onDetected(item)
     // Detection is an assist, never an override: a reference picked up from speech
@@ -173,6 +185,13 @@ export default function TranscriptPanel({ translation, onPresent, onPreview, onA
 
   useEffect(() => { fetchRef.current = fetchVerse }, [fetchVerse])
 
+  // Scan text for references and fetch them. Safe to call repeatedly on the same
+  // words — fetchVerse dedupes by book/chapter/verse/translation, so a reference
+  // seen in an interim result is not fetched again when the final arrives.
+  const runDetection = useCallback((text: string) => {
+    detectScriptures(text).forEach((s) => fetchRef.current(s))
+  }, [])
+
   const appendTranscript = useCallback((text: string) => {
     setFullTranscript((prev) => {
       const updated = prev + text + ' '
@@ -181,8 +200,8 @@ export default function TranscriptPanel({ translation, onPresent, onPreview, onA
       }, 50)
       return updated
     })
-    detectScriptures(text).forEach((s) => fetchRef.current(s))
-  }, [])
+    runDetection(text)
+  }, [runDetection])
 
   // ── Online (Deepgram) ────────────────────────────────────────────────────
 
@@ -213,7 +232,7 @@ export default function TranscriptPanel({ translation, onPresent, onPreview, onA
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) ws.send(e.data)
       }
-      recorder.start(250)
+      recorder.start(100) // smaller slices reach Deepgram sooner
     }
     ws.onmessage = (event) => {
       try {
@@ -226,6 +245,17 @@ export default function TranscriptPanel({ translation, onPresent, onPreview, onA
           appendTranscript(text)
         } else {
           setInterimText(text)
+          // Detect on interim words too. Waiting for is_final costs a second or
+          // more of silence-based endpointing, which the operator experiences as
+          // "the verse appears long after the preacher said it". The reference is
+          // usually complete in the interim text well before the phrase finalises.
+          //
+          // The last word is still being formed though — "John 3:1" is what you see
+          // a moment before "John 3:16" — so scan only up to the final space. That
+          // costs one word of delay and stops a spurious John 3:1 from landing in
+          // the detections list next to the verse the preacher actually named.
+          const settled = text.lastIndexOf(' ')
+          if (settled > 0) runDetection(text.slice(0, settled))
         }
       } catch { /* ignore */ }
     }
@@ -234,7 +264,7 @@ export default function TranscriptPanel({ translation, onPresent, onPreview, onA
       setIsListening(false); setInterimText(''); setStatus('')
       if (e.code === 1008) setErrorMsg('Invalid API key.')
     }
-  }, [apiKey, appendTranscript, audioConstraints, loadAudioDevices])
+  }, [apiKey, appendTranscript, runDetection, audioConstraints, loadAudioDevices])
 
   // ── Offline (Whisper) ────────────────────────────────────────────────────
 
@@ -524,6 +554,12 @@ export default function TranscriptPanel({ translation, onPresent, onPreview, onA
             <div key={d.id} className="flex items-center gap-2 px-3 py-1.5 border-b border-[#1e1e22]">
               <span className="w-1.5 h-1.5 bg-orange-500 rounded-full shrink-0" />
               <span className="text-white text-xs font-medium flex-1 truncate">{d.result.reference}</span>
+              <span
+                className={`text-[10px] tabular-nums shrink-0 ${d.ms > 400 ? 'text-amber-500' : 'text-slate-600'}`}
+                title={d.source === 'cache' ? 'Served from the local Bible cache' : 'Fetched over the network'}
+              >
+                {d.source === 'cache' ? '·' : '☁'} {d.ms}ms
+              </span>
               <button
                 onClick={() => {
                   const item: QueueItem = {

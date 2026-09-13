@@ -21,6 +21,8 @@ export function setupDatabase(): void {
   db.pragma('journal_mode = WAL')
 
   createTables()
+  migrateCachedChapters()
+  backfillCachedChapters()
   seedDefaultData()
 }
 
@@ -51,6 +53,18 @@ function createTables(): void {
     CREATE VIRTUAL TABLE IF NOT EXISTS songs_fts
       USING fts5(title, artist, lyrics, content=songs, content_rowid=id);
 
+    -- Which (translation, book, chapter) triples have been fetched in full.
+    -- Individual verses are also cached one at a time, so the presence of rows in
+    -- bible_verses does NOT mean the chapter is complete — this table is what
+    -- distinguishes "we have all of John 3" from "we happen to have John 3:16".
+    CREATE TABLE IF NOT EXISTS cached_chapters (
+      translation TEXT NOT NULL,
+      book TEXT NOT NULL,
+      chapter INTEGER NOT NULL,
+      cached_at INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (translation, book, chapter)
+    );
+
     CREATE TABLE IF NOT EXISTS service_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       type TEXT NOT NULL,
@@ -59,6 +73,32 @@ function createTables(): void {
       translation TEXT,
       shown_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+  `)
+}
+
+// Installs created before cache expiry existed have no cached_at column. Add it
+// rather than rebuild the table, so an existing offline download survives.
+function migrateCachedChapters(): void {
+  const cols = db.prepare(`PRAGMA table_info(cached_chapters)`).all() as Array<{ name: string }>
+  if (cols.some((c) => c.name === 'cached_at')) return
+  db.exec(`ALTER TABLE cached_chapters ADD COLUMN cached_at INTEGER NOT NULL DEFAULT 0`)
+}
+
+// Existing installs (including a completed offline KJV download) predate the
+// cached_chapters table. Rather than re-downloading everything, mark any chapter
+// whose stored verses run contiguously from verse 1 — the shape produced by a
+// wholesale chapter insert. A lone cached verse leaves a gap and is skipped, so
+// it will be fetched properly on next use.
+function backfillCachedChapters(): void {
+  const already = (db.prepare('SELECT COUNT(*) as c FROM cached_chapters').get() as { c: number }).c
+  if (already > 0) return
+
+  db.exec(`
+    INSERT OR IGNORE INTO cached_chapters (translation, book, chapter, cached_at)
+    SELECT translation, book, chapter, 0
+    FROM bible_verses
+    GROUP BY translation, book, chapter
+    HAVING COUNT(*) >= 2 AND MIN(verse) = 1 AND MAX(verse) = COUNT(*)
   `)
 }
 

@@ -22,11 +22,10 @@ const TOTAL_CHAPTERS = Object.values(BOOK_CHAPTER_COUNTS).reduce((a, b) => a + b
 
 let downloadInProgress = false
 
-function getDownloadedChapterCount(): number {
-  const db = getDb()
-  const row = db.prepare(
-    `SELECT COUNT(*) as c FROM (SELECT DISTINCT book, chapter FROM bible_verses WHERE translation = 'KJV')`
-  ).get() as { c: number }
+function getDownloadedChapterCount(trans = 'KJV'): number {
+  const row = getDb()
+    .prepare(`SELECT COUNT(*) as c FROM cached_chapters WHERE translation = ?`)
+    .get(trans.toUpperCase()) as { c: number }
   return row.c
 }
 
@@ -161,6 +160,94 @@ function parseEsvVerses(text: string): Array<{ verse: number; text: string }> {
   return verses
 }
 
+// Public-domain translations may be cached indefinitely and downloaded in bulk.
+// Everything else (NIV, NLT, NKJV via API.Bible; ESV; NASB) is licensed: API.Bible
+// caps caching at fewer than 500 consecutive verses and requires cached text be
+// refreshed at least every 30 days, so those are never bulk-downloaded and their
+// cache entries expire. See vmix/README and the Settings copy.
+const PUBLIC_DOMAIN = new Set(['KJV', 'WEB', 'ASV', 'YLT', 'DARBY', 'BBE'])
+const LICENSED_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
+export function isPublicDomain(trans: string): boolean {
+  return PUBLIC_DOMAIN.has(trans.toUpperCase())
+}
+
+// Fetches an entire chapter from whichever API serves this translation and caches
+// every verse. One network round trip warms the whole chapter, so the next verse
+// the preacher names — and every Next/Prev step through the passage — is a ~1ms
+// SQLite read instead of another call over the church WiFi.
+async function fetchChapterFromApi(
+  trans: string, book: string, chapter: number
+): Promise<Array<{ verse: number; text: string }>> {
+  if (APIBIBLE_IDS[trans]) {
+    const verses = await fetchApiBibleChapter(trans, book, chapter)
+    if (verses.length === 0) throw new Error(`${book} chapter ${chapter} was not found.`)
+    return verses
+  }
+  if (trans === 'ESV') {
+    const passage = await fetchEsvPassage(`${book} ${chapter}`, true)
+    const verses = parseEsvVerses(passage)
+    if (verses.length === 0) throw new Error(`${book} chapter ${chapter} was not found.`)
+    return verses
+  }
+  const apiCode = TRANSLATION_MAP[trans] || 'kjv'
+  const ref = encodeURIComponent(`${book} ${chapter}`)
+  const res = await fetch(`https://bible-api.com/${ref}?translation=${apiCode}`)
+  if (res.status === 404) throw new Error(`${book} chapter ${chapter} was not found.`)
+  if (!res.ok) throw new Error(`Server error (${res.status}). Try again later.`)
+  const data = (await res.json()) as { verses: Array<{ verse: number; text: string }> }
+  return data.verses.map((v) => ({ verse: v.verse, text: v.text.trim() }))
+}
+
+function cacheChapter(trans: string, book: string, chapter: number, verses: Array<{ verse: number; text: string }>): void {
+  const db = getDb()
+  const mark = db.prepare(
+    'INSERT INTO cached_chapters (translation, book, chapter, cached_at) VALUES (?, ?, ?, ?) ' +
+    'ON CONFLICT(translation, book, chapter) DO UPDATE SET cached_at = excluded.cached_at'
+  )
+  const replace = db.prepare(
+    'INSERT INTO bible_verses (translation, book, book_number, chapter, verse, text) VALUES (?, ?, ?, ?, ?, ?) ' +
+    'ON CONFLICT(translation, book, chapter, verse) DO UPDATE SET text = excluded.text'
+  )
+  db.transaction(() => {
+    // Refreshing stale licensed text must actually replace it, not be ignored.
+    for (const v of verses) replace.run(trans, book, 0, chapter, v.verse, v.text)
+    mark.run(trans, book, chapter, Date.now())
+  })()
+}
+
+function isChapterComplete(trans: string, book: string, chapter: number): boolean {
+  const row = getDb()
+    .prepare('SELECT cached_at FROM cached_chapters WHERE translation = ? AND book = ? AND chapter = ?')
+    .get(trans, book, chapter) as { cached_at: number } | undefined
+  if (!row) return false
+  if (isPublicDomain(trans)) return true
+  // Licensed text goes stale on purpose — refetch past the 30-day window. A
+  // cached_at of 0 comes from the pre-expiry backfill and counts as stale.
+  return row.cached_at > 0 && Date.now() - row.cached_at < LICENSED_CACHE_TTL_MS
+}
+
+function readCachedChapter(trans: string, book: string, chapter: number): Array<{ verse: number; text: string }> {
+  return getDb()
+    .prepare('SELECT verse, text FROM bible_verses WHERE translation = ? AND book = ? AND chapter = ? ORDER BY verse')
+    .all(trans, book, chapter) as Array<{ verse: number; text: string }>
+}
+
+/** Cached chapter if present, otherwise one network fetch that also fills the cache. */
+async function ensureChapterCached(
+  trans: string, book: string, chapter: number
+): Promise<Array<{ verse: number; text: string }>> {
+  if (isChapterComplete(trans, book, chapter)) {
+    const cached = readCachedChapter(trans, book, chapter)
+    if (cached.length > 0) return cached
+  }
+  const fetched = await fetchChapterFromApi(trans, book, chapter)
+  cacheChapter(trans, book, chapter, fetched)
+  // Re-read so any verse cached individually beforehand is included in order.
+  const merged = readCachedChapter(trans, book, chapter)
+  return merged.length >= fetched.length ? merged : fetched
+}
+
 export function setupBibleHandlers(): void {
   // Fetch a verse — check local DB first, fall back to API
   ipcMain.handle('bible:get-verse', async (_event, { book, chapter, verse, translation }) => {
@@ -174,11 +261,27 @@ export function setupBibleHandlers(): void {
       )
       .get(trans, book, chapter, verse) as { text: string } | undefined
 
-    if (cached) {
-      return { success: true, text: cached.text, reference: `${book} ${chapter}:${verse}`, translation: trans }
+    // Public-domain text never goes stale. Licensed text is only served from cache
+    // while its chapter is inside the 30-day refresh window the licence requires.
+    if (cached && (isPublicDomain(trans) || isChapterComplete(trans, book, chapter))) {
+      return { success: true, text: cached.text, reference: `${book} ${chapter}:${verse}`, translation: trans, source: 'cache' }
     }
 
-    // Fetch from API
+    // Cache miss. Pull the whole chapter rather than the single verse — it is one
+    // round trip either way, and it leaves every other verse in the chapter warm
+    // for the next detection and for Prev/Next stepping.
+    try {
+      const verses = await ensureChapterCached(trans, book, chapter)
+      const hit = verses.find((v) => v.verse === verse)
+      if (hit) {
+        return { success: true, text: hit.text, reference: `${book} ${chapter}:${verse}`, translation: trans, source: 'network' }
+      }
+      return { success: false, error: `${book} ${chapter}:${verse} was not found. Please check the book, chapter, and verse number.` }
+    } catch {
+      // Chapter endpoint failed — fall back to the single-verse endpoints so a
+      // chapter-level outage cannot block a verse that would otherwise resolve.
+    }
+
     try {
       let text: string
 
@@ -214,7 +317,7 @@ export function setupBibleHandlers(): void {
         'INSERT OR IGNORE INTO bible_verses (translation, book, book_number, chapter, verse, text) VALUES (?, ?, ?, ?, ?, ?)'
       ).run(trans, book, 0, chapter, verse, text)
 
-      return { success: true, text, reference: `${book} ${chapter}:${verse}`, translation: trans }
+      return { success: true, text, reference: `${book} ${chapter}:${verse}`, translation: trans, source: 'network' }
     } catch (err) {
       return { success: false, error: String(err) }
     }
@@ -222,33 +325,49 @@ export function setupBibleHandlers(): void {
 
   // Get a verse range (e.g. John 3:16-18)
   ipcMain.handle('bible:get-verse-range', async (_event, { book, chapter, verseStart, verseEnd, translation }) => {
-    const trans = translation.toUpperCase()
+    const trans = (translation as string).toUpperCase()
+    const reference = `${book} ${chapter}:${verseStart}-${verseEnd}`
+    const wanted = verseEnd - verseStart + 1
+
+    // Ranges were previously never cached — every repeat of the same passage went
+    // back over the network. Serve them from the chapter cache like single verses.
+    const readRange = () =>
+      getDb()
+        .prepare(
+          'SELECT verse, text FROM bible_verses WHERE translation = ? AND book = ? AND chapter = ? AND verse BETWEEN ? AND ? ORDER BY verse'
+        )
+        .all(trans, book, chapter, verseStart, verseEnd) as Array<{ verse: number; text: string }>
+
+    const cached = readRange()
+    if (cached.length === wanted) {
+      return { success: true, text: cached.map((v) => v.text).join(' '), reference, translation: trans, source: 'cache' }
+    }
+
+    try {
+      await ensureChapterCached(trans, book, chapter)
+      const rows = readRange()
+      if (rows.length > 0) {
+        return { success: true, text: rows.map((v) => v.text).join(' '), reference, translation: trans, source: 'network' }
+      }
+      return { success: false, error: `${reference} was not found.` }
+    } catch {
+      // Chapter fetch failed — fall back to the dedicated range endpoints.
+    }
+
     try {
       let text: string
-
       if (APIBIBLE_IDS[trans]) {
-        const result = await fetchApiBibleRange(trans, book, chapter, verseStart, verseEnd)
-        text = result.text
+        text = (await fetchApiBibleRange(trans, book, chapter, verseStart, verseEnd)).text
       } else if (trans === 'ESV') {
-        text = await fetchEsvPassage(`${book} ${chapter}:${verseStart}-${verseEnd}`, false)
+        text = await fetchEsvPassage(reference, false)
       } else {
         const apiCode = TRANSLATION_MAP[trans] || 'kjv'
-        const ref = encodeURIComponent(`${book} ${chapter}:${verseStart}-${verseEnd}`)
-        const url = `https://bible-api.com/${ref}?translation=${apiCode}`
-
-        const response = await fetch(url)
-        if (!response.ok) throw new Error(`API error: ${response.status}`)
-
-        const data = (await response.json()) as { text: string; reference: string }
+        const res = await fetch(`https://bible-api.com/${encodeURIComponent(reference)}?translation=${apiCode}`)
+        if (!res.ok) throw new Error(`API error: ${res.status}`)
+        const data = (await res.json()) as { text: string }
         text = data.text.trim()
       }
-
-      return {
-        success: true,
-        text,
-        reference: `${book} ${chapter}:${verseStart}-${verseEnd}`,
-        translation: trans
-      }
+      return { success: true, text, reference, translation: trans, source: 'network' }
     } catch (err) {
       return { success: false, error: String(err) }
     }
@@ -270,112 +389,113 @@ export function setupBibleHandlers(): void {
   })
 
   ipcMain.handle('bible:get-chapter', async (_event, { book, chapter, translation }) => {
-    const db = getDb()
     const trans = (translation as string).toUpperCase()
-    const verses = db
-      .prepare('SELECT verse, text FROM bible_verses WHERE translation = ? AND book = ? AND chapter = ? ORDER BY verse')
-      .all(trans, book, chapter) as Array<{ verse: number; text: string }>
-
-    if (verses.length > 0) return { success: true, verses, book, chapter, translation: trans }
-
     try {
-      let chapterVerses: Array<{ verse: number; text: string }>
-
-      if (APIBIBLE_IDS[trans]) {
-        chapterVerses = await fetchApiBibleChapter(trans, book, chapter)
-        if (chapterVerses.length === 0) throw new Error(`${book} chapter ${chapter} was not found.`)
-      } else if (trans === 'ESV') {
-        try {
-          const passage = await fetchEsvPassage(`${book} ${chapter}`, true)
-          chapterVerses = parseEsvVerses(passage)
-          if (chapterVerses.length === 0) throw new Error('empty')
-        } catch {
-          throw new Error(`${book} chapter ${chapter} was not found. Please check the book and chapter number.`)
-        }
-      } else {
-        const apiCode = TRANSLATION_MAP[trans] || 'kjv'
-        const ref = encodeURIComponent(`${book} ${chapter}`)
-        const res = await fetch(`https://bible-api.com/${ref}?translation=${apiCode}`)
-        if (res.status === 404) throw new Error(`${book} chapter ${chapter} was not found. Please check the book and chapter number.`)
-        if (!res.ok) throw new Error(`Server error (${res.status}). Try again later.`)
-        const data = (await res.json()) as { verses: Array<{ verse: number; text: string }> }
-        chapterVerses = data.verses.map((v) => ({ verse: v.verse, text: v.text.trim() }))
-      }
-
-      const insert = db.prepare(
-        'INSERT OR IGNORE INTO bible_verses (translation, book, book_number, chapter, verse, text) VALUES (?, ?, ?, ?, ?, ?)'
-      )
-      db.transaction(() => {
-        for (const v of chapterVerses) insert.run(trans, book, 0, chapter, v.verse, v.text)
-      })()
-
-      return { success: true, verses: chapterVerses, book, chapter, translation: trans }
+      const verses = await ensureChapterCached(trans, book, chapter)
+      return { success: true, verses, book, chapter, translation: trans }
     } catch (err) {
       return { success: false, error: String(err) }
     }
   })
 
-  ipcMain.handle('bible:download-status', () => {
-    return { downloaded: getDownloadedChapterCount(), total: TOTAL_CHAPTERS, inProgress: downloadInProgress }
+  // Pre-load a specific set of chapters — the ones in this Sunday's service plan.
+  // This is the legitimate route for licensed translations: a handful of chapters
+  // rather than the whole Bible, well inside the licence terms, and it turns every
+  // planned passage into a local read before the service starts.
+  ipcMain.handle('bible:preload-chapters', async (event, { chapters }: {
+    chapters: Array<{ book: string; chapter: number; translation: string }>
+  }) => {
+    const sender: WebContents = event.sender
+
+    // Collapse duplicates — a plan often cites the same chapter several times.
+    const unique = new Map<string, { book: string; chapter: number; translation: string }>()
+    for (const c of chapters) {
+      const trans = c.translation.toUpperCase()
+      unique.set(`${trans}|${c.book}|${c.chapter}`, { ...c, translation: trans })
+    }
+    const list = [...unique.values()]
+
+    let done = 0
+    let failed = 0
+    const errors: string[] = []
+
+    for (const { book, chapter, translation } of list) {
+      if (sender.isDestroyed()) break
+      try {
+        await ensureChapterCached(translation, book, chapter)
+      } catch {
+        failed++
+        errors.push(`${book} ${chapter} (${translation})`)
+      }
+      done++
+      if (!sender.isDestroyed()) {
+        sender.send('bible:preload-progress', { done, total: list.length })
+      }
+      await new Promise((r) => setTimeout(r, 80))
+    }
+
+    return { total: list.length, failed, errors }
   })
 
-  ipcMain.handle('bible:start-download', async (event) => {
-    if (downloadInProgress) return
-    downloadInProgress = true
+  ipcMain.handle('bible:download-status', (_event, arg?: { translation?: string }) => {
+    const trans = (arg?.translation ?? 'KJV').toUpperCase()
+    return {
+      downloaded: getDownloadedChapterCount(trans),
+      total: TOTAL_CHAPTERS,
+      inProgress: downloadInProgress,
+      translation: trans,
+      downloadable: isPublicDomain(trans),
+    }
+  })
 
+  ipcMain.handle('bible:start-download', async (event, arg?: { translation?: string }) => {
+    if (downloadInProgress) return { started: false, reason: 'already running' }
+    const trans = (arg?.translation ?? 'KJV').toUpperCase()
+
+    // Licensed translations are deliberately not bulk-downloadable — API.Bible caps
+    // caching at fewer than 500 consecutive verses. Use "Prepare for Service" to
+    // pre-load just the chapters in the plan instead.
+    if (!isPublicDomain(trans)) {
+      return { started: false, reason: `${trans} is licensed and cannot be downloaded in full. Use Prepare for Service instead.` }
+    }
+
+    downloadInProgress = true
     const sender: WebContents = event.sender
-    const db = getDb()
 
     const allChapters: Array<{ book: string; chapter: number }> = []
     for (const [book, count] of Object.entries(BOOK_CHAPTER_COUNTS)) {
-      for (let ch = 1; ch <= count; ch++) {
-        allChapters.push({ book, chapter: ch })
-      }
+      for (let ch = 1; ch <= count; ch++) allChapters.push({ book, chapter: ch })
     }
 
-    const already = db
-      .prepare(`SELECT DISTINCT book, chapter FROM bible_verses WHERE translation = 'KJV'`)
-      .all() as Array<{ book: string; chapter: number }>
+    const already = getDb()
+      .prepare(`SELECT book, chapter FROM cached_chapters WHERE translation = ?`)
+      .all(trans) as Array<{ book: string; chapter: number }>
     const done = new Set(already.map((r) => `${r.book}:${r.chapter}`))
     const remaining = allChapters.filter((c) => !done.has(`${c.book}:${c.chapter}`))
 
     let completed = allChapters.length - remaining.length
-    sender.send('bible:download-progress', { done: completed, total: TOTAL_CHAPTERS })
+    sender.send('bible:download-progress', { done: completed, total: TOTAL_CHAPTERS, translation: trans })
 
-    const insert = db.prepare(
-      'INSERT OR IGNORE INTO bible_verses (translation, book, book_number, chapter, verse, text) VALUES (?, ?, ?, ?, ?, ?)'
-    )
-
+    let failed = 0
     for (const { book, chapter } of remaining) {
       if (sender.isDestroyed()) break
       try {
-        const ref = encodeURIComponent(`${book} ${chapter}`)
-        const res = await fetch(`https://bible-api.com/${ref}?translation=kjv`)
-        if (!res.ok) throw new Error(`${res.status}`)
-
-        const data = (await res.json()) as { verses?: Array<{ verse: number; text: string }> }
-        if (data.verses?.length) {
-          db.transaction(() => {
-            for (const v of data.verses!) {
-              insert.run('KJV', book, 0, chapter, v.verse, v.text.trim())
-            }
-          })()
-        }
-
+        const verses = await fetchChapterFromApi(trans, book, chapter)
+        if (verses.length) cacheChapter(trans, book, chapter, verses)
         completed++
-        if (!sender.isDestroyed()) {
-          sender.send('bible:download-progress', { done: completed, total: TOTAL_CHAPTERS })
-        }
       } catch {
-        // Skip failed chapters — they stay uncached and will use the API fallback
+        failed++ // leave it uncached; it falls back to a live fetch when needed
       }
-
+      if (!sender.isDestroyed()) {
+        sender.send('bible:download-progress', { done: completed, total: TOTAL_CHAPTERS, translation: trans })
+      }
       await new Promise((r) => setTimeout(r, 120))
     }
 
     downloadInProgress = false
     if (!sender.isDestroyed()) {
-      sender.send('bible:download-progress', { done: TOTAL_CHAPTERS, total: TOTAL_CHAPTERS, complete: true })
+      sender.send('bible:download-progress', { done: completed, total: TOTAL_CHAPTERS, translation: trans, complete: true, failed })
     }
+    return { started: true, failed }
   })
 }

@@ -58,9 +58,16 @@ interface Window {
     }>
 
     // Offline Bible download
-    getBibleDownloadStatus: () => Promise<{ downloaded: number; total: number; inProgress: boolean }>
-    startBibleDownload: () => Promise<void>
-    onBibleDownloadProgress: (cb: (data: { done: number; total: number; complete?: boolean }) => void) => () => void
+    getBibleDownloadStatus: (arg?: { translation?: string }) => Promise<{
+      downloaded: number; total: number; inProgress: boolean; translation: string; downloadable: boolean
+    }>
+    startBibleDownload: (arg?: { translation?: string }) => Promise<{ started: boolean; reason?: string; failed?: number }>
+    onBibleDownloadProgress: (cb: (data: {
+      done: number; total: number; translation?: string; complete?: boolean; failed?: number
+    }) => void) => () => void
+    preloadChapters: (chapters: Array<{ book: string; chapter: number; translation: string }>) =>
+      Promise<{ total: number; failed: number; errors: string[] }>
+    onPreloadProgress: (cb: (d: { done: number; total: number }) => void) => () => void
 
     // Semantic search
     getSemanticStatus: () => Promise<{ indexed: number; cached: number; isIndexing: boolean; modelReady: boolean; modelLoading: boolean }>
