@@ -10,6 +10,7 @@ import { setupSemanticHandlers } from './handlers/semantic'
 import { setupWhisperHandlers } from './handlers/whisper'
 import { broadcast, startVmixOutput, stopVmixOutput, isVmixOutputRunning } from './handlers/vmix-output'
 import { setupFileOutputHandlers, writeFileOutput } from './handlers/file-output'
+import { setupBackgroundHandlers } from './handlers/backgrounds'
 
 // Window-capture tools (vMix, OBS, NDI Tools) often show a black/frozen image for
 // GPU-compositied Electron windows. Disabling hardware acceleration makes the
@@ -184,6 +185,7 @@ app.whenReady().then(async () => {
   setupSemanticHandlers(join(app.getPath('userData'), 'model-cache'))
   setupWhisperHandlers(join(app.getPath('userData'), 'model-cache'))
   setupFileOutputHandlers(() => projectorWindow)
+  setupBackgroundHandlers()
 
   createOperatorWindow()
   createProjectorWindow()

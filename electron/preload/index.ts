@@ -119,6 +119,11 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('bible:preload-progress', h)
     return () => ipcRenderer.removeListener('bible:preload-progress', h)
   },
+  listBackgrounds: () => ipcRenderer.invoke('backgrounds:list'),
+  addBackground: () => ipcRenderer.invoke('backgrounds:add'),
+  getBackground: (id: string) => ipcRenderer.invoke('backgrounds:get', { id }),
+  removeBackground: (id: string) => ipcRenderer.invoke('backgrounds:remove', { id }),
+  importBackground: (dataUrl: string) => ipcRenderer.invoke('backgrounds:import', { dataUrl }),
   fileOutStatus: () => ipcRenderer.invoke('fileout:status'),
   fileOutStart: () => ipcRenderer.invoke('fileout:start'),
   fileOutStop: () => ipcRenderer.invoke('fileout:stop'),

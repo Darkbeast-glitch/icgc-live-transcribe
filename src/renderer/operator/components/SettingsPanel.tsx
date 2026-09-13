@@ -122,15 +122,53 @@ export default function SettingsPanel({ theme, onThemeChange }: Props) {
   const pct = dlStatus ? Math.round((dlStatus.downloaded / dlStatus.total) * 100) : 0
   const isComplete = dlStatus ? dlStatus.downloaded >= dlStatus.total : false
 
+  // Every background the operator has ever added stays in the library, so picking
+  // a new one for this Sunday never means re-finding last Sunday's file.
+  const [backgrounds, setBackgrounds] = useState<Array<{ id: string; name: string; thumb: string; addedAt: number }>>([])
+
+  useEffect(() => {
+    window.api.listBackgrounds().then(async (library) => {
+      // A background set before the library existed has no id — adopt it once so
+      // it appears in the grid and can be returned to later.
+      if (theme.backgroundImage && !theme.backgroundId) {
+        const imported = await window.api.importBackground(theme.backgroundImage)
+        if (imported) {
+          setBackgrounds(imported.library)
+          onThemeChange({ ...theme, backgroundId: imported.id })
+          return
+        }
+      }
+      setBackgrounds(library)
+    })
+    // Runs once on mount; adoption is a one-off migration.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const pickImage = async () => {
-    const result = await window.api.loadBackgroundImage()
-    if (result) {
-      onThemeChange({ ...theme, backgroundImage: result.dataUrl })
+    const result = await window.api.addBackground()
+    if (!result) return
+    setBackgrounds(result.library)
+    onThemeChange({ ...theme, backgroundImage: result.dataUrl, backgroundId: result.id })
+  }
+
+  const useBackground = async (id: string) => {
+    const result = await window.api.getBackground(id)
+    if (!result?.dataUrl) return
+    onThemeChange({ ...theme, backgroundImage: result.dataUrl, backgroundId: id })
+  }
+
+  const deleteBackground = async (id: string) => {
+    const library = await window.api.removeBackground(id)
+    setBackgrounds(library)
+    // Only clear the projector if the deleted image is the one on screen.
+    if (theme.backgroundId === id) {
+      onThemeChange({ ...theme, backgroundImage: undefined, backgroundId: undefined })
     }
   }
 
   const removeImage = () => {
-    onThemeChange({ ...theme, backgroundImage: undefined })
+    // Clears the projector background. The image stays in the library below.
+    onThemeChange({ ...theme, backgroundImage: undefined, backgroundId: undefined })
   }
   const setPreset = (presetId: string) => {
     const preset = PRESET_THEMES.find((t) => t.id === presetId) ?? PRESET_THEMES[0]
@@ -361,46 +399,81 @@ export default function SettingsPanel({ theme, onThemeChange }: Props) {
       {/* Background Image */}
       <section className="mb-8">
         <h3 className="text-slate-400 text-xs uppercase tracking-widest mb-3">Background Image</h3>
-        <div className="p-4 bg-slate-800/60 border border-slate-700 rounded-xl space-y-3">
-          {theme.backgroundImage ? (
-            <div className="flex items-center gap-3">
+        <div className="p-4 bg-slate-800/60 border border-slate-700 rounded-xl space-y-4">
+          <div className="flex items-center gap-3">
+            {theme.backgroundImage ? (
               <div
                 className="w-24 h-16 rounded-lg shrink-0 bg-cover bg-center border border-slate-600"
                 style={{ backgroundImage: `url(${theme.backgroundImage})` }}
               />
-              <div className="flex-1 min-w-0">
-                <p className="text-white text-sm">Custom background active</p>
-                <p className="text-slate-400 text-xs mt-0.5">Shown behind text on the projector</p>
+            ) : (
+              <div className="w-24 h-16 rounded-lg shrink-0 border border-dashed border-slate-600 flex items-center justify-center text-slate-600 text-[10px]">
+                None
               </div>
-              <div className="flex flex-col gap-1.5 shrink-0">
-                <button
-                  onClick={pickImage}
-                  className="text-xs px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition-colors"
-                >
-                  Change
-                </button>
-                <button
-                  onClick={removeImage}
-                  className="text-xs px-3 py-1.5 bg-slate-700 hover:bg-red-700/60 text-slate-400 hover:text-white rounded transition-colors"
-                >
-                  Remove
-                </button>
-              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-white text-sm">
+                {theme.backgroundImage ? 'Custom background active' : 'No background image'}
+              </p>
+              <p className="text-slate-400 text-xs mt-0.5">
+                {theme.backgroundImage
+                  ? 'Shown behind text on the projector'
+                  : 'Add a photo or your church logo to display behind the text.'}
+              </p>
             </div>
-          ) : (
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-white text-sm">No background image</p>
-                <p className="text-slate-400 text-xs mt-0.5">
-                  Upload a photo or your church logo to display behind the text.
-                </p>
-              </div>
+            <div className="flex flex-col gap-1.5 shrink-0">
               <button
                 onClick={pickImage}
-                className="shrink-0 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg transition-colors"
+                className="text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-colors"
               >
-                Choose Image
+                Add Image
               </button>
+              {theme.backgroundImage && (
+                <button
+                  onClick={removeImage}
+                  className="text-xs px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {backgrounds.length > 0 && (
+            <div>
+              <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-2">
+                Saved backgrounds — click to use
+              </p>
+              <div className="grid grid-cols-4 gap-2">
+                {backgrounds.map((bg) => {
+                  const active = theme.backgroundId === bg.id
+                  return (
+                    <div key={bg.id} className="relative group">
+                      <button
+                        onClick={() => useBackground(bg.id)}
+                        title={bg.name}
+                        className={`w-full aspect-video rounded-lg bg-cover bg-center border-2 transition-all ${
+                          active ? 'border-indigo-500 ring-1 ring-indigo-500/40' : 'border-slate-700 hover:border-slate-500'
+                        }`}
+                        style={{ backgroundImage: `url(${bg.thumb})` }}
+                      />
+                      {active && (
+                        <span className="absolute bottom-1 left-1 px-1 py-0.5 bg-indigo-600 text-white text-[9px] rounded pointer-events-none">
+                          In use
+                        </span>
+                      )}
+                      <button
+                        onClick={() => deleteBackground(bg.id)}
+                        aria-label={`Delete ${bg.name}`}
+                        title="Delete permanently"
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 flex items-center justify-center bg-slate-900 border border-slate-600 text-slate-400 hover:text-red-400 hover:border-red-500 rounded-full text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
         </div>

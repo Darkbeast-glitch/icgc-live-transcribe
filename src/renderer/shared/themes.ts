@@ -7,6 +7,7 @@ export interface ProjectorTheme {
   refColor: string
   fontSize: 'sm' | 'md' | 'lg' | 'xl'
   backgroundImage?: string // base64 data URL
+  backgroundId?: string    // id in the on-disk background library, when it came from there
   customFontSize?: number  // rem override, 1.0–7.0; undefined = use fontSize preset
   letterSpacing?: number   // em, 0–0.3; undefined = default (0)
 }

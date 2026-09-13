@@ -86,6 +86,11 @@ interface Window {
     vmixStart: () => Promise<{ port: number }>
     vmixStop: () => Promise<void>
     vmixStatus: () => Promise<{ running: boolean }>
+    listBackgrounds: () => Promise<Array<{ id: string; name: string; thumb: string; addedAt: number }>>
+    addBackground: () => Promise<{ id: string; dataUrl: string; library: Array<{ id: string; name: string; thumb: string; addedAt: number }> } | null>
+    getBackground: (id: string) => Promise<{ id: string; dataUrl: string } | null>
+    removeBackground: (id: string) => Promise<Array<{ id: string; name: string; thumb: string; addedAt: number }>>
+    importBackground: (dataUrl: string) => Promise<{ id: string; library: Array<{ id: string; name: string; thumb: string; addedAt: number }> } | null>
     fileOutStatus: () => Promise<{ running: boolean; dir: string }>
     fileOutStart: () => Promise<{ running: boolean; dir: string }>
     fileOutStop: () => Promise<{ running: boolean; dir: string }>
