@@ -425,9 +425,7 @@ export default function SettingsPanel({ theme, onThemeChange }: Props) {
                   aria-label="Translation to download"
                   className="bg-[#1e1e22] text-white text-xs rounded px-2 py-1 border border-[#333338] focus:outline-none focus:border-orange-500 disabled:opacity-50"
                 >
-                  {['KJV', 'WEB', 'ASV', 'YLT', 'DARBY', 'BBE'].map((t) => (
-                    <option key={t} value={t}>{t} — free to store offline</option>
-                  ))}
+                  <option value="KJV">KJV — free to store offline</option>
                   {['NIV', 'NLT', 'NKJV', 'ESV', 'NASB'].map((t) => (
                     <option key={t} value={t}>{t} — licensed, cannot download</option>
                   ))}

@@ -68,7 +68,11 @@ export interface DetectedScripture {
   raw: string
 }
 
-export const TRANSLATIONS = ['NIV', 'NLT', 'NKJV', 'KJV', 'ESV', 'WEB', 'ASV', 'NASB', 'BBE', 'YLT', 'DARBY']
+// Only the translations ICGC FMT actually presents from. The archaic public-domain
+// versions (WEB, ASV, YLT, DARBY, BBE) were dropped — they were never used and only
+// lengthened the dropdown the operator has to scan mid-service. The backend still
+// resolves them if an old service plan references one.
+export const TRANSLATIONS = ['KJV', 'NIV', 'NLT', 'NKJV', 'ESV', 'NASB']
 
 export const TRANSLATION_LABELS: Record<string, string> = {
   NIV: 'NIV – New International Version',
@@ -76,12 +80,7 @@ export const TRANSLATION_LABELS: Record<string, string> = {
   NKJV: 'NKJV – New King James Version',
   KJV: 'KJV – King James Version',
   ESV: 'ESV – English Standard Version',
-  WEB: 'WEB – World English Bible',
-  ASV: 'ASV – American Standard',
-  NASB: 'NASB – New American Standard',
-  BBE: 'BBE – Basic English Bible',
-  YLT: 'YLT – Young\'s Literal',
-  DARBY: 'DARBY – Darby\'s Translation'
+  NASB: 'NASB – New American Standard'
 }
 
 export const BIBLE_BOOKS = [
