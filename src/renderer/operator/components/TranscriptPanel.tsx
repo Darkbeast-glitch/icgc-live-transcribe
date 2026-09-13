@@ -202,7 +202,12 @@ export default function TranscriptPanel({ translation, onPresent, onPreview, onA
   // threshold, while a correctly-heard one clears it within ~100ms. Measured over
   // realistic utterances this is exactly as accurate as waiting for is_final,
   // without the wait for a pause that a preacher in full flow never gives.
-  const STABILITY_THRESHOLD = 2
+  // 1 = fire on first sighting (fastest). 2 = require confirmation, which halves
+  // spurious detections but only fires early if Deepgram sends the reference in
+  // two interims before finalising. Live in-service testing showed 2 was too slow,
+  // so speed wins: a wrong entry only ever reaches the detections list, never the
+  // projector, whereas a late verse is one the congregation never sees.
+  const STABILITY_THRESHOLD = 1
   const streakRef = useRef<Map<string, number>>(new Map())
 
   const runInterimDetection = useCallback((text: string) => {
