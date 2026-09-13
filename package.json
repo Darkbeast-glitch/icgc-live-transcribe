@@ -1,6 +1,6 @@
 {
   "name": "icgc-fmt-live-word",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "ICGC FMT Live Word — Church scripture & lyrics display app",
   "main": "out/main/index.js",
   "scripts": {
