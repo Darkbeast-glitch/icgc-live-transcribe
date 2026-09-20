@@ -268,8 +268,16 @@ export default function ChapterBrowser({ translation, activeVerse, onPresent, on
 
   useEffect(() => { loadChapter() }, [book, chapter, translation])
 
+  // Scroll to the active verse when it changes (for auto-live feature)
+  // but only if we're already viewing that book/chapter
   useEffect(() => {
-    if (activeRef.current) {
+    if (activeVerse && activeVerse.book === book && activeVerse.chapter === chapter && activeRef.current) {
+      activeRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }, [activeVerse, book, chapter])
+
+  useEffect(() => {
+    if (activeRef.current && jumpVerse !== null) {
       activeRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
   }, [verses, jumpVerse])

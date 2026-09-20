@@ -1,4 +1,5 @@
 import { QueueItem } from '@shared/types'
+import { useState, useEffect } from 'react'
 
 interface Props {
   queue: QueueItem[]
@@ -15,6 +16,18 @@ export default function QueuePanel({
   queue, recentDetections, nowShowingId,
   onPresent, onPreview, onRemove, onClearQueue, onClearDetections,
 }: Props) {
+  const [autoSend, setAutoSend] = useState(false)
+  const [lastDetectionCount, setLastDetectionCount] = useState(0)
+
+  // Auto-send the most recent detection when new ones arrive
+  useEffect(() => {
+    if (!autoSend || recentDetections.length === 0) return
+    if (recentDetections.length > lastDetectionCount) {
+      onPresent(recentDetections[0])
+    }
+    setLastDetectionCount(recentDetections.length)
+  }, [recentDetections, autoSend, lastDetectionCount, onPresent])
+
   return (
     <div className="flex flex-col w-72 shrink-0 border-l border-[#252528]">
       {/* Queue */}
@@ -89,7 +102,23 @@ export default function QueuePanel({
       {/* Recent Detections */}
       <div className="flex flex-col flex-1 min-h-0">
         <div className="flex items-center justify-between px-3 py-2 shrink-0 border-b border-[#252528]">
-          <span className="text-slate-300 text-xs font-medium">Recent detections</span>
+          <div className="flex items-center gap-2">
+            <span className="text-slate-300 text-xs font-medium">Recent detections</span>
+            <button
+              onClick={() => setAutoSend(!autoSend)}
+              title={autoSend ? 'Auto-live ON: scriptures go live immediately' : 'Auto-live OFF: click to send manually'}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-all ${
+                autoSend
+                  ? 'bg-green-600 text-white'
+                  : 'bg-slate-700/50 text-slate-500 hover:bg-slate-700 hover:text-slate-400'
+              }`}
+            >
+              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              Auto Live
+            </button>
+          </div>
           {recentDetections.length > 0 && (
             <button onClick={onClearDetections} className="text-slate-600 hover:text-red-400 text-[10px] transition-colors">
               Clear all

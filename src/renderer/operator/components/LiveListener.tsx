@@ -27,6 +27,7 @@ export default function LiveListener({ translation, onDisplay }: Props) {
   const [errorMsg, setErrorMsg] = useState('')
   const [status, setStatus] = useState('')
   const [search, setSearch] = useState('')
+  const [autoSend, setAutoSend] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
@@ -79,8 +80,12 @@ export default function LiveListener({ translation, onDisplay }: Props) {
 
       const entry: QueuedVerse = { scripture, result, id: key }
       setQueue((prev) => [entry, ...prev])
+
+      if (autoSend) {
+        sendToProjector(entry)
+      }
     },
-    [translation, sendToProjector]
+    [translation, sendToProjector, autoSend]
   )
 
   useEffect(() => { fetchAndQueueRef.current = fetchAndQueue }, [fetchAndQueue])
@@ -340,9 +345,25 @@ export default function LiveListener({ translation, onDisplay }: Props) {
         <div className="px-3 py-3 border-b border-slate-700 flex-shrink-0">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-slate-300 text-sm font-medium">Detected Scriptures</h2>
-            {queue.length > 0 && (
-              <span className="text-slate-500 text-xs">{queue.length}</span>
-            )}
+            <div className="flex items-center gap-2">
+              {queue.length > 0 && (
+                <span className="text-slate-500 text-xs">{queue.length}</span>
+              )}
+              <button
+                onClick={() => setAutoSend(!autoSend)}
+                title={autoSend ? 'Auto-send enabled: scriptures go live immediately' : 'Auto-send disabled: click to send manually'}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-all ${
+                  autoSend
+                    ? 'bg-green-600 text-white'
+                    : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                }`}
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Auto
+              </button>
+            </div>
           </div>
           <input
             type="text"
