@@ -98,6 +98,7 @@ export default function ProjectorApp() {
               backgroundImage: `url(${theme.backgroundImage})`,
               backgroundSize: 'cover',
               backgroundPosition: 'center',
+              opacity: theme.backgroundOpacity ?? 1,
             }}
           />
           {showContent_ && <div className="absolute inset-0 bg-black/55" />}

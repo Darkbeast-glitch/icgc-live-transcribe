@@ -211,7 +211,7 @@ export default function TranscriptPanel({ translation, onPresent, onPreview, onA
   const streakRef = useRef<Map<string, number>>(new Map())
 
   const runInterimDetection = useCallback((text: string) => {
-    const found = detectScriptures(text)
+    const found = detectScriptures(text, { includeChapterOnly: false })
     const key = (s: DetectedScripture) => `${s.book}|${s.chapter}|${s.verse}|${s.verseEnd ?? ''}`
     const present = new Set(found.map(key))
     const streak = streakRef.current

@@ -28,6 +28,7 @@ interface SemanticStatus {
 }
 
 export default function SettingsPanel({ theme, onThemeChange }: Props) {
+  const backgroundOpacity = theme.backgroundOpacity ?? 1
   const [dlStatus, setDlStatus] = useState<DownloadStatus | null>(null)
   const [dlTranslation, setDlTranslation] = useState('KJV')
   const [dlNote, setDlNote] = useState('')
@@ -403,9 +404,14 @@ export default function SettingsPanel({ theme, onThemeChange }: Props) {
           <div className="flex items-center gap-3">
             {theme.backgroundImage ? (
               <div
-                className="w-24 h-16 rounded-lg shrink-0 bg-cover bg-center border border-slate-600"
-                style={{ backgroundImage: `url(${theme.backgroundImage})` }}
-              />
+                className="relative w-24 h-16 rounded-lg shrink-0 overflow-hidden border border-slate-600"
+                style={{ backgroundColor: theme.bgColor }}
+              >
+                <div
+                  className="absolute inset-0 bg-cover bg-center"
+                  style={{ backgroundImage: `url(${theme.backgroundImage})`, opacity: backgroundOpacity }}
+                />
+              </div>
             ) : (
               <div className="w-24 h-16 rounded-lg shrink-0 border border-dashed border-slate-600 flex items-center justify-center text-slate-600 text-[10px]">
                 None
@@ -438,6 +444,34 @@ export default function SettingsPanel({ theme, onThemeChange }: Props) {
               )}
             </div>
           </div>
+
+          {theme.backgroundImage && (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="background-opacity" className="text-slate-400 text-xs">
+                  Background image opacity
+                </label>
+                <span className="text-white text-xs font-mono">
+                  {Math.round(backgroundOpacity * 100)}%
+                </span>
+              </div>
+              <input
+                id="background-opacity"
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={backgroundOpacity}
+                onChange={(e) => onThemeChange({ ...theme, backgroundOpacity: parseFloat(e.target.value) })}
+                className="w-full h-2 rounded-full appearance-none cursor-pointer accent-indigo-500"
+                style={{ background: `linear-gradient(to right, #6366f1 0%, #6366f1 ${backgroundOpacity * 100}%, #334155 ${backgroundOpacity * 100}%, #334155 100%)` }}
+              />
+              <div className="flex justify-between text-slate-600 text-xs mt-0.5">
+                <span>Transparent</span>
+                <span>Opaque</span>
+              </div>
+            </div>
+          )}
 
           {backgrounds.length > 0 && (
             <div>

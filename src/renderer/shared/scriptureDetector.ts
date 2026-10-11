@@ -46,6 +46,7 @@ const BOOK_ALIASES: Record<string, string> = {
   gen: 'Genesis', ge: 'Genesis',
   ex: 'Exodus', exo: 'Exodus', exod: 'Exodus',
   lev: 'Leviticus', le: 'Leviticus', lv: 'Leviticus',
+  labeticus: 'Leviticus', lebeticus: 'Leviticus', labiticus: 'Leviticus',
   num: 'Numbers', nu: 'Numbers', nm: 'Numbers', numb: 'Numbers',
   deu: 'Deuteronomy', deut: 'Deuteronomy', dt: 'Deuteronomy',
   josh: 'Joshua', jos: 'Joshua',
@@ -125,6 +126,27 @@ const bookPattern = [
   ...Object.keys(BOOK_ALIASES).map((a) => a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
 ].join('|')
 
+const canonicalBookPattern = BIBLE_BOOKS
+  .map((b) => b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  .join('|')
+
+const BOOK_CHAPTER_COUNTS: Record<string, number> = {
+  Genesis: 50, Exodus: 40, Leviticus: 27, Numbers: 36, Deuteronomy: 34,
+  Joshua: 24, Judges: 21, Ruth: 4, '1 Samuel': 31, '2 Samuel': 24,
+  '1 Kings': 22, '2 Kings': 25, '1 Chronicles': 29, '2 Chronicles': 36,
+  Ezra: 10, Nehemiah: 13, Esther: 10, Job: 42, Psalms: 150, Proverbs: 31,
+  Ecclesiastes: 12, 'Song of Solomon': 8, Isaiah: 66, Jeremiah: 52,
+  Lamentations: 5, Ezekiel: 48, Daniel: 12, Hosea: 14, Joel: 3, Amos: 9,
+  Obadiah: 1, Jonah: 4, Micah: 7, Nahum: 3, Habakkuk: 3, Zephaniah: 3,
+  Haggai: 2, Zechariah: 14, Malachi: 4, Matthew: 28, Mark: 16, Luke: 24,
+  John: 21, Acts: 28, Romans: 16, '1 Corinthians': 16, '2 Corinthians': 13,
+  Galatians: 6, Ephesians: 6, Philippians: 4, Colossians: 4,
+  '1 Thessalonians': 5, '2 Thessalonians': 3, '1 Timothy': 6,
+  '2 Timothy': 4, Titus: 3, Philemon: 1, Hebrews: 13, James: 5,
+  '1 Peter': 5, '2 Peter': 3, '1 John': 5, '2 John': 1, '3 John': 1,
+  Jude: 1, Revelation: 22,
+}
+
 // Matches "John", "1 Cor", "Song of Solomon", etc.
 const BOOK_RE = `((?:\\d\\s?)?(?:${bookPattern})\\.?)`
 
@@ -138,7 +160,7 @@ const TYPED_REGEX = new RegExp(
 
 // ── Pattern 2: "verse" keyword — "John chapter 3 verse 16", "John 3 the verse 48"
 const SPOKEN_VERSE_REGEX = new RegExp(
-  `\\b${BOOK_RE}\\s*(?:chapters?\\s*)?(\\d{1,3})\\s+(?:the\\s+)?verses?\\s+${VERSE_RANGE}`,
+  `\\b${BOOK_RE}\\s*(?:chapters?\\s*)?(\\d{1,3})(?:\\s*,\\s*|\\s+)(?:the\\s+)?verses?\\s+${VERSE_RANGE}`,
   'gi'
 )
 
@@ -159,7 +181,22 @@ const BOOK_OF_REGEX = new RegExp(
 // ── Pattern 5: Chapter-only — "turn to Romans 8", "according to Matthew 14"
 //   Only fires when preceded by a navigation word to reduce false positives
 const CHAPTER_ONLY_REGEX = new RegExp(
-  `\\b(?:turn\\s+to|open|read|go\\s+to|look\\s+at|according\\s+to|in|from|see)\\s+(?:the\\s+book\\s+of\\s+)?${BOOK_RE}\\s*(?:chapters?\\s*)?(\\d{1,3})\\b(?!\\s*[:\\d])`,
+  `\\b(?:turn\\s+to|open|read|go\\s+to|look\\s+at|according\\s+to|in|from|see)\\s+(?:the\\s+book\\s+of\\s+)?${BOOK_RE}\\s*(?:chapters?\\s*)?(\\d{1,3})\\b(?!\\s*(?:[:\\d]|,?\\s*(?:the\\s+)?verses?\\b))`,
+  'gi'
+)
+
+// A bare canonical book + chapter is also a reference: "Genesis 5" means Genesis 5:1.
+// Exclude numbered-book suffixes (e.g. "John 3" inside "1 John 3") and anything that
+// continues into an explicit verse reference.
+const BARE_CHAPTER_ONLY_REGEX = new RegExp(
+  `(?<!\\d\\s)\\b(?:the\\s+book\\s+of\\s+)?(${canonicalBookPattern})\\s+(?:chapters?\\s*)?(\\d{1,3})\\b(?!\\s*(?:[:\\d]|,?\\s*(?:the\\s+)?verses?\\b))`,
+  'gi'
+)
+
+// Transcription may omit the pause or separator in chapter/verse references:
+// "John 515" means John 5:15. A valid full chapter number takes precedence.
+const COMPRESSED_REFERENCE_REGEX = new RegExp(
+  `\\b${BOOK_RE}\\s+(\\d{3,4})\\b(?!\\s*:)`,
   'gi'
 )
 
@@ -194,9 +231,29 @@ function makeChapterResult(bookRaw: string, chStr: string, raw: string): Detecte
   return { book, chapter, verse: 1, raw }
 }
 
+function makeCompressedResult(bookRaw: string, digits: string, raw: string): DetectedScripture | null {
+  const book = resolveBook(bookRaw)
+  if (!book) return null
+  const maxChapter = BOOK_CHAPTER_COUNTS[book]
+  if (!maxChapter) return null
+
+  // Try the longest possible chapter first, so "Genesis 501" resolves to 50:1.
+  for (let split = digits.length - 1; split >= 1; split--) {
+    const chapter = parseInt(digits.slice(0, split), 10)
+    const verse = parseInt(digits.slice(split), 10)
+    if (chapter >= 1 && chapter <= maxChapter && verse >= 1 && verse <= 176) {
+      return { book, chapter, verse, raw }
+    }
+  }
+  return null
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export function detectScriptures(rawText: string): DetectedScripture[] {
+export function detectScriptures(
+  rawText: string,
+  options: { includeChapterOnly?: boolean } = {}
+): DetectedScripture[] {
   // Strip possessive 's ("Mark's 6" → "Mark 6") — common in Ghanaian preaching style
   const text = wordsToDigits(rawText.replace(/[''']s\b/g, ''))
   const results: DetectedScripture[] = []
@@ -227,19 +284,33 @@ export function detectScriptures(rawText: string): DetectedScripture[] {
     add(makeResult(m[1], m[2], m[3], m[4], m[0]))
   }
 
-  // 4. Ordinal Psalm: "the 23rd Psalm" → Psalms 23:1
-  for (const m of text.matchAll(ORDINAL_PSALM_REGEX)) {
-    add(makeChapterResult('Psalms', m[1], m[0]))
-  }
-
-  // 5. Spoken bare (space/comma) — only if not already matched
+  // 4. Spoken bare (space/comma) — only if not already matched
   for (const m of text.matchAll(SPOKEN_BARE_REGEX)) {
     add(makeResult(m[1], m[2], m[3], m[4], m[0]))
   }
 
-  // 6. Chapter-only with navigation trigger word
-  for (const m of text.matchAll(CHAPTER_ONLY_REGEX)) {
-    add(makeChapterResult(m[1], m[2], m[0]))
+  // 5. Compact chapter/verse digits, e.g. "John 515" → John 5:15.
+  for (const m of text.matchAll(COMPRESSED_REFERENCE_REGEX)) {
+    const book = resolveBook(m[1])
+    const number = parseInt(m[2], 10)
+    if (book && number > (BOOK_CHAPTER_COUNTS[book] ?? 0)) {
+      add(makeCompressedResult(m[1], m[2], m[0]))
+    }
+  }
+
+  if (options.includeChapterOnly !== false) {
+    // Ordinal Psalm: "the 23rd Psalm" → Psalms 23:1
+    for (const m of text.matchAll(ORDINAL_PSALM_REGEX)) {
+      add(makeChapterResult('Psalms', m[1], m[0]))
+    }
+
+    // Chapter-only with navigation trigger word, or a bare canonical book name.
+    for (const m of text.matchAll(CHAPTER_ONLY_REGEX)) {
+      add(makeChapterResult(m[1], m[2], m[0]))
+    }
+    for (const m of text.matchAll(BARE_CHAPTER_ONLY_REGEX)) {
+      add(makeChapterResult(m[1], m[2], m[0]))
+    }
   }
 
   return results

@@ -50,6 +50,14 @@ export default function App() {
   // Queue + detections
   const [queue, setQueue] = useState<QueueItem[]>([])
   const [recentDetections, setRecentDetections] = useState<QueueItem[]>([])
+  const [scriptureNavigationTarget, setScriptureNavigationTarget] = useState<{
+    book: string
+    chapter: number
+    verse: number
+  } | null>(null)
+  const [autoLive, setAutoLive] = useState(true) // Default: ON
+  const autoLiveRef = useRef(autoLive)
+  autoLiveRef.current = autoLive
 
   // Media items — kept here so they survive tab switches
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
@@ -220,6 +228,12 @@ export default function App() {
       const filtered = prev.filter((d) => d.reference !== item.reference)
       return [item, ...filtered].slice(0, 15)
     })
+    if (autoLiveRef.current) presentItem(item)
+  }, [presentItem])
+
+  const openDetectedInScripture = useCallback((item: QueueItem) => {
+    setScriptureNavigationTarget({ book: item.book, chapter: item.chapter, verse: item.verse })
+    setBottomTab('bible')
   }, [])
 
   const handleQueueAction = useCallback((idOrAction: string) => {
@@ -323,6 +337,8 @@ export default function App() {
               nowShowing={nowShowing}
               programPreview={programPreview}
               theme={theme}
+              autoLive={autoLive}
+              onAutoLiveChange={setAutoLive}
               canStepVerse={liveVerse !== null}
               onStepVerse={stepVerse}
               onTakeLive={handleTakeLive}
@@ -374,6 +390,7 @@ export default function App() {
                 <ChapterBrowser
                   translation={translation}
                   activeVerse={activeVerse}
+                  navigationTarget={scriptureNavigationTarget}
                   onPresent={presentItem}
                   onPreview={previewItem}
                   onAddToQueue={addToQueue}
@@ -430,6 +447,7 @@ export default function App() {
           nowShowingId={nowShowingId}
           onPresent={presentItem}
           onPreview={previewItem}
+          onOpenInScripture={openDetectedInScripture}
           onRemove={handleQueueAction}
           onClearQueue={() => setQueue([])}
           onClearDetections={() => setRecentDetections([])}

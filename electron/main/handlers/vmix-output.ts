@@ -110,6 +110,7 @@ const HTML = (port: number) => `<!DOCTYPE html>
       position:relative;background:#000;
       background-image:linear-gradient(135deg,#0f0c29,#302b63,#24243e);
     }
+    #background{position:absolute;inset:0;background-size:cover;background-position:center;display:none}
     #overlay{position:absolute;inset:0;background:rgba(0,0,0,.5);display:none}
     #content{position:relative;z-index:10;text-align:center;padding:6vw;width:100%;max-width:1200px}
     #heading{letter-spacing:.15em;text-transform:uppercase;font-weight:600;margin-bottom:1.2rem;font-size:clamp(.8rem,2vw,1.3rem)}
@@ -126,6 +127,7 @@ const HTML = (port: number) => `<!DOCTYPE html>
 </head>
 <body>
   <div id="root">
+    <div id="background"></div>
     <div id="overlay"></div>
     <div id="content">
       <div id="blank">ICGC FMT LIVE WORD</div>
@@ -137,6 +139,7 @@ const HTML = (port: number) => `<!DOCTYPE html>
   <div id="status">connecting…</div>
 <script>
   const root=document.getElementById('root')
+  const backgroundEl=document.getElementById('background')
   const overlay=document.getElementById('overlay')
   const blankEl=document.getElementById('blank')
   const headingEl=document.getElementById('heading')
@@ -144,17 +147,21 @@ const HTML = (port: number) => `<!DOCTYPE html>
   const refEl=document.getElementById('ref')
   const statusEl=document.getElementById('status')
 
-  let theme={gradient:'linear-gradient(135deg,#0f0c29,#302b63,#24243e)',textColor:'#ffffff',refColor:'#f97316',backgroundImage:null,letterSpacing:.01}
+  let theme={gradient:'linear-gradient(135deg,#0f0c29,#302b63,#24243e)',textColor:'#ffffff',refColor:'#f97316',backgroundImage:null,backgroundOpacity:1,letterSpacing:.01}
   let retryTimer=null
 
   function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
   function applyTheme(){
     if(theme.backgroundImage){
-      root.style.cssText='background-image:url('+theme.backgroundImage+');background-size:cover;background-position:center'
+      root.style.background=theme.bgColor||'#000'
+      backgroundEl.style.display='block'
+      backgroundEl.style.backgroundImage='url('+theme.backgroundImage+')'
+      backgroundEl.style.opacity=theme.backgroundOpacity==null?1:theme.backgroundOpacity
       overlay.style.display='block'
     } else {
-      root.style.cssText='background:'+( theme.gradient||'#000')
+      root.style.background=theme.gradient||'#000'
+      backgroundEl.style.display='none'
       overlay.style.display='none'
     }
   }

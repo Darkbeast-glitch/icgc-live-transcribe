@@ -7,6 +7,8 @@ interface Props {
   nowShowing: ActiveDisplay
   programPreview: ActiveDisplay
   theme: ProjectorTheme
+  autoLive: boolean
+  onAutoLiveChange: (enabled: boolean) => void
   canStepVerse: boolean
   onStepVerse: (delta: number) => void
   onTakeLive: () => void
@@ -88,8 +90,14 @@ function MiniScreen({ display, theme, onExpand }: {
   return (
     <div
       className="flex-1 rounded-xl overflow-hidden relative flex items-center justify-center p-4 group"
-      style={{ background: theme.backgroundImage ? `url(${theme.backgroundImage}) center/cover` : theme.gradient }}
+      style={{ background: theme.backgroundImage ? theme.bgColor : theme.gradient }}
     >
+      {theme.backgroundImage && (
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url(${theme.backgroundImage})`, opacity: theme.backgroundOpacity ?? 1 }}
+        />
+      )}
       {theme.backgroundImage && display.type !== 'blank' && (
         <div className="absolute inset-0 bg-black/50" />
       )}
@@ -143,9 +151,15 @@ function ExpandedModal({ display, theme, label, onClose }: {
 
         {/* Screen content */}
         <div
-          className="w-full h-full flex items-center justify-center"
-          style={{ background: theme.backgroundImage ? `url(${theme.backgroundImage}) center/cover` : theme.gradient }}
+          className="relative w-full h-full flex items-center justify-center"
+          style={{ background: theme.backgroundImage ? theme.bgColor : theme.gradient }}
         >
+          {theme.backgroundImage && (
+            <div
+              className="absolute inset-0 bg-cover bg-center"
+              style={{ backgroundImage: `url(${theme.backgroundImage})`, opacity: theme.backgroundOpacity ?? 1 }}
+            />
+          )}
           {theme.backgroundImage && display.type !== 'blank' && (
             <div className="absolute inset-0 bg-black/50" />
           )}
@@ -156,7 +170,7 @@ function ExpandedModal({ display, theme, label, onClose }: {
   )
 }
 
-export default function PreviewPanel({ nowShowing, programPreview, theme, canStepVerse, onStepVerse, onTakeLive }: Props) {
+export default function PreviewPanel({ nowShowing, programPreview, theme, autoLive, onAutoLiveChange, canStepVerse, onStepVerse, onTakeLive }: Props) {
   const hasProgramPreview = programPreview.type !== 'blank'
   const [expanded, setExpanded] = useState<'program' | 'live' | null>(null)
 
@@ -183,7 +197,22 @@ export default function PreviewPanel({ nowShowing, programPreview, theme, canSte
         <div className="flex flex-col flex-1 min-w-0">
           <div className="flex items-center justify-between mb-2 px-1">
             <p className="text-slate-500 text-xs">Live display</p>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => onAutoLiveChange(!autoLive)}
+                title={autoLive ? 'Auto-live ON: detected scriptures go live immediately' : 'Auto-live OFF: detected scriptures stay in Recent detections'}
+                aria-pressed={autoLive}
+                className={`inline-flex items-center justify-center gap-1.5 min-w-[96px] whitespace-nowrap px-3 py-1 rounded text-[10px] font-medium transition-all ${
+                  autoLive
+                    ? 'bg-green-600 text-white'
+                    : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-white'
+                }`}
+              >
+                <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Auto Live
+              </button>
               <button
                 onClick={() => onStepVerse(-1)}
                 disabled={!canStepVerse}

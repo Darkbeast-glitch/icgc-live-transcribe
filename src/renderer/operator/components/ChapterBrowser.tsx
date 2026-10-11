@@ -6,6 +6,7 @@ interface VerseRow { verse: number; text: string }
 interface Props {
   translation: string
   activeVerse: { book: string; chapter: number; verse: number } | null
+  navigationTarget: { book: string; chapter: number; verse: number } | null
   onPresent: (item: QueueItem) => void
   onPreview: (item: QueueItem) => void
   onAddToQueue: (item: QueueItem) => void
@@ -240,7 +241,7 @@ function rankBooks(query: string, limit = 8): BookMatch[] {
     .map((s) => s.m)
 }
 
-export default function ChapterBrowser({ translation, activeVerse, onPresent, onPreview, onAddToQueue }: Props) {
+export default function ChapterBrowser({ translation, activeVerse, navigationTarget, onPresent, onPreview, onAddToQueue }: Props) {
   const [book, setBook] = useState('John')
   const [chapter, setChapter] = useState(3)
   const [verses, setVerses] = useState<VerseRow[]>([])
@@ -266,7 +267,30 @@ export default function ChapterBrowser({ translation, activeVerse, onPresent, on
   // Doing so locks the browser whenever a verse is presented. The operator
   // should be free to browse freely while content is live on screen.
 
-  useEffect(() => { loadChapter() }, [book, chapter, translation])
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setVerses([])
+    setRangeAnchor(null)
+    setRangeEnd(null)
+    window.api.getChapter({ book, chapter, translation }).then((result) => {
+      if (cancelled) return
+      if (result.success && result.verses) setVerses(result.verses)
+      setLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [book, chapter, translation])
+
+  useEffect(() => {
+    if (!navigationTarget) return
+    setSearchInput('')
+    setSearchError('')
+    setShowSuggestions(false)
+    setSuggestions([])
+    setJumpVerse(navigationTarget.verse)
+    setBook(navigationTarget.book)
+    setChapter(navigationTarget.chapter)
+  }, [navigationTarget])
 
   // Scroll to the active verse when it changes (for auto-live feature)
   // but only if we're already viewing that book/chapter
@@ -295,16 +319,6 @@ export default function ChapterBrowser({ translation, activeVerse, onPresent, on
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
-
-  const loadChapter = useCallback(async () => {
-    setLoading(true)
-    setVerses([])
-    setRangeAnchor(null)
-    setRangeEnd(null)
-    const result = await window.api.getChapter({ book, chapter, translation })
-    if (result.success && result.verses) setVerses(result.verses)
-    setLoading(false)
-  }, [book, chapter, translation])
 
   const handleSearchChange = (val: string) => {
     setSearchInput(val)
