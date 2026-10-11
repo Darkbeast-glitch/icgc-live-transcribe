@@ -1,0 +1,123 @@
+/* Note content styles for projector display */
+.note-content p {
+  margin-bottom: 0.5em;
+}
+
+.note-content p:last-child {
+  margin-bottom: 0;
+}
+
+/* Preserve text alignment from editor */
+.note-content .ql-align-left {
+  text-align: left;
+}
+
+.note-content .ql-align-center {
+  text-align: center;
+}
+
+.note-content .ql-align-right {
+  text-align: right;
+}
+
+.note-content .ql-align-justify {
+  text-align: justify;
+}
+
+/* Text formatting */
+.note-content strong {
+  font-weight: 700;
+}
+
+.note-content em {
+  font-style: italic;
+}
+
+.note-content u {
+  text-decoration: underline;
+}
+
+.note-content s {
+  text-decoration: line-through;
+}
+
+/* Headers */
+.note-content h1 {
+  font-size: 1.8em;
+  font-weight: 700;
+  margin-bottom: 0.5em;
+}
+
+.note-content h2 {
+  font-size: 1.5em;
+  font-weight: 700;
+  margin-bottom: 0.4em;
+}
+
+.note-content h3 {
+  font-size: 1.3em;
+  font-weight: 600;
+  margin-bottom: 0.3em;
+}
+
+/* Lists */
+.note-content ul,
+.note-content ol {
+  padding-left: 2em;
+  margin-bottom: 0.5em;
+}
+
+.note-content li {
+  margin-bottom: 0.25em;
+}
+
+/* Links */
+.note-content a {
+  text-decoration: underline;
+}
+
+/* Size classes from Quill */
+.note-content .ql-size-small {
+  font-size: 0.75em;
+}
+
+.note-content .ql-size-large {
+  font-size: 1.5em;
+}
+
+.note-content .ql-size-huge {
+  font-size: 2em;
+}
+
+/* Indentation */
+.note-content .ql-indent-1 {
+  padding-left: 3em;
+}
+
+.note-content .ql-indent-2 {
+  padding-left: 6em;
+}
+
+.note-content .ql-indent-3 {
+  padding-left: 9em;
+}
+
+.note-content .ql-indent-4 {
+  padding-left: 12em;
+}
+
+.note-content .ql-indent-5 {
+  padding-left: 15em;
+}
+
+.note-content .ql-indent-6 {
+  padding-left: 18em;
+}
+
+.note-content .ql-indent-7 {
+  padding-left: 21em;
+}
+
+.note-content .ql-indent-8 {
+  padding-left: 24em;
+}

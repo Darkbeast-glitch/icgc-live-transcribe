@@ -6,7 +6,7 @@
 
 **AI-Powered Scripture & Lyrics Display for Live Church Services**
 
-[![Version](https://img.shields.io/badge/version-1.4.2-blue.svg)](https://github.com/Darkbeast-glitch/icgc-live-transcribe/releases)
+[![Version](https://img.shields.io/badge/version-1.4.3-blue.svg)](https://github.com/Darkbeast-glitch/icgc-live-transcribe/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey.svg)](#installation)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -115,12 +115,12 @@ Download the latest release for your platform:
 
 #### Windows
 ```
-ICGC-FMT-Live-Word-Setup-1.4.2.exe
+ICGC-FMT-Live-Word-Setup-1.4.3.exe
 ```
 
 #### macOS
 ```
-ICGC-FMT-Live-Word-1.4.2.dmg
+ICGC-FMT-Live-Word-1.4.3.dmg
 ```
 
 👉 **[Download Latest Release](https://github.com/Darkbeast-glitch/icgc-live-transcribe/releases/latest)**
@@ -128,13 +128,13 @@ ICGC-FMT-Live-Word-1.4.2.dmg
 ### Installation Steps
 
 #### Windows
-1. Download `ICGC-FMT-Live-Word-Setup-1.4.2.exe`
+1. Download `ICGC-FMT-Live-Word-Setup-1.4.3.exe`
 2. Run the installer
 3. Follow the installation wizard
 4. Launch from Desktop shortcut or Start Menu
 
 #### macOS
-1. Download `ICGC-FMT-Live-Word-1.4.2.dmg`
+1. Download `ICGC-FMT-Live-Word-1.4.3.dmg`
 2. Open the DMG file
 3. Drag the app to Applications folder
 4. Right-click and select "Open" (first time only, due to Gatekeeper)

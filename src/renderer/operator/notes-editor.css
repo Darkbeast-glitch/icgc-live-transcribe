@@ -1,0 +1,169 @@
+/* Quill editor dark theme customization */
+.notes-editor-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 300px;
+}
+
+.notes-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.notes-editor .ql-toolbar {
+  background: #334155;
+  border: 1px solid #475569 !important;
+  border-radius: 0.5rem 0.5rem 0 0;
+  padding: 8px;
+}
+
+.notes-editor .ql-container {
+  flex: 1;
+  background: #334155;
+  border: 1px solid #475569 !important;
+  border-top: none !important;
+  border-radius: 0 0 0.5rem 0.5rem;
+  font-size: 14px;
+  color: #ffffff;
+}
+
+.notes-editor .ql-editor {
+  min-height: 200px;
+  color: #ffffff;
+  padding: 12px;
+}
+
+.notes-editor .ql-editor.ql-blank::before {
+  color: #64748b;
+  font-style: normal;
+  left: 12px;
+}
+
+/* Toolbar buttons */
+.notes-editor .ql-toolbar button {
+  color: #cbd5e1;
+}
+
+.notes-editor .ql-toolbar button:hover {
+  color: #ffffff;
+}
+
+.notes-editor .ql-toolbar button.ql-active {
+  color: #6366f1;
+}
+
+.notes-editor .ql-toolbar .ql-stroke {
+  stroke: #cbd5e1;
+}
+
+.notes-editor .ql-toolbar button:hover .ql-stroke {
+  stroke: #ffffff;
+}
+
+.notes-editor .ql-toolbar button.ql-active .ql-stroke {
+  stroke: #6366f1;
+}
+
+.notes-editor .ql-toolbar .ql-fill {
+  fill: #cbd5e1;
+}
+
+.notes-editor .ql-toolbar button:hover .ql-fill {
+  fill: #ffffff;
+}
+
+.notes-editor .ql-toolbar button.ql-active .ql-fill {
+  fill: #6366f1;
+}
+
+/* Dropdown pickers */
+.notes-editor .ql-toolbar .ql-picker-label {
+  color: #cbd5e1;
+  border: 1px solid #475569;
+}
+
+.notes-editor .ql-toolbar .ql-picker-label:hover {
+  color: #ffffff;
+  border-color: #64748b;
+}
+
+.notes-editor .ql-toolbar .ql-picker-options {
+  background: #1e293b;
+  border: 1px solid #475569;
+}
+
+.notes-editor .ql-toolbar .ql-picker-item {
+  color: #cbd5e1;
+}
+
+.notes-editor .ql-toolbar .ql-picker-item:hover {
+  color: #ffffff;
+  background: #334155;
+}
+
+.notes-editor .ql-toolbar .ql-picker-item.ql-selected {
+  color: #6366f1;
+}
+
+/* Color picker */
+.notes-editor .ql-toolbar .ql-color-picker .ql-picker-options {
+  padding: 8px;
+}
+
+/* Editor content styles */
+.notes-editor .ql-editor h1,
+.notes-editor .ql-editor h2,
+.notes-editor .ql-editor h3 {
+  color: #ffffff;
+}
+
+.notes-editor .ql-editor a {
+  color: #6366f1;
+}
+
+.notes-editor .ql-editor blockquote {
+  border-left: 4px solid #6366f1;
+  padding-left: 16px;
+  color: #cbd5e1;
+}
+
+.notes-editor .ql-editor code,
+.notes-editor .ql-editor pre {
+  background-color: #1e293b;
+  color: #cbd5e1;
+}
+
+/* List styles */
+.notes-editor .ql-editor ol,
+.notes-editor .ql-editor ul {
+  color: #ffffff;
+}
+
+/* Focus state */
+.notes-editor .ql-container.ql-snow:focus-within {
+  border-color: #6366f1 !important;
+}
+
+.notes-editor .ql-toolbar.ql-snow:has(+ .ql-container.ql-snow:focus-within) {
+  border-color: #6366f1 !important;
+}
+
+/* Scrollbar styling for editor */
+.notes-editor .ql-editor::-webkit-scrollbar {
+  width: 8px;
+}
+
+.notes-editor .ql-editor::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+.notes-editor .ql-editor::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+
+.notes-editor .ql-editor::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}

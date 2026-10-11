@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { DisplayVerse, DisplayLyrics, DisplayMode, DisplayTimer } from '@shared/types'
 import { ProjectorTheme, FONT_SIZES, FontSizeKey, buildTheme } from '@shared/themes'
 import { sanitizeNoteHtml } from '@shared/sanitizeNoteHtml'
+import './note-content.css'
 
 interface SlotContent {
   mode: Exclude<DisplayMode, 'timer' | 'blank'> | 'image' | 'note'
@@ -212,18 +213,23 @@ function NoteDisplay({
   fontSize: string
 }) {
   return (
-    <div className="text-center">
+    <div>
       {note.heading && (
         <p
-          className="font-semibold tracking-widest uppercase mb-6"
+          className="font-semibold tracking-widest uppercase mb-6 text-center"
           style={{ fontSize: 'clamp(1rem, 2.5vw, 1.6rem)', color: theme.refColor }}
         >
           {note.heading}
         </p>
       )}
       <div
-        className="font-light leading-relaxed"
-        style={{ fontSize, lineHeight: 1.5, color: theme.textColor, letterSpacing: theme.letterSpacing != null ? `${theme.letterSpacing}em` : undefined }}
+        className="font-light leading-relaxed note-content"
+        style={{
+          fontSize,
+          lineHeight: 1.5,
+          color: theme.textColor,
+          letterSpacing: theme.letterSpacing != null ? `${theme.letterSpacing}em` : undefined
+        }}
         dangerouslySetInnerHTML={{ __html: sanitizeNoteHtml(note.html) }}
       />
     </div>

@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import ReactQuill from 'react-quill'
+import 'quill/dist/quill.snow.css'
+import '../notes-editor.css'
 import { sanitizeNoteHtml, noteHtmlToPlainText } from '@shared/sanitizeNoteHtml'
 
 interface Props {
@@ -15,36 +18,36 @@ function loadRecent(): { heading: string; html: string }[] {
   return []
 }
 
-const TOOLBAR_BUTTONS: { command: string; label: string; title: string }[] = [
-  { command: 'bold', label: 'B', title: 'Bold' },
-  { command: 'italic', label: 'I', title: 'Italic' },
-  { command: 'underline', label: 'U', title: 'Underline' },
+// Quill editor configuration
+const modules = {
+  toolbar: [
+    ['bold', 'italic', 'underline', 'strike'],
+    [{ align: [] }],
+    [{ list: 'ordered' }, { list: 'bullet' }],
+    [{ indent: '-1' }, { indent: '+1' }],
+    [{ size: ['small', false, 'large', 'huge'] }],
+    [{ header: [1, 2, 3, false] }],
+    [{ color: [] }, { background: [] }],
+    ['link'],
+    ['clean'],
+  ],
+}
+
+const formats = [
+  'bold', 'italic', 'underline', 'strike',
+  'align', 'list', 'bullet', 'indent',
+  'size', 'header', 'color', 'background', 'link',
 ]
 
 export default function NotesPanel({ onDisplay }: Props) {
   const [heading, setHeading] = useState('')
   const [recent, setRecent] = useState(loadRecent)
   const [sentFlash, setSentFlash] = useState(false)
-  const [isEmpty, setIsEmpty] = useState(true)
-  const editorRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    document.execCommand('styleWithCSS', false, 'false')
-  }, [])
-
-  const handleInput = () => {
-    const plain = (editorRef.current?.textContent ?? '').trim()
-    setIsEmpty(plain.length === 0)
-  }
-
-  const exec = (command: string) => {
-    editorRef.current?.focus()
-    document.execCommand(command, false)
-    handleInput()
-  }
+  const [editorContent, setEditorContent] = useState('')
+  const quillRef = useRef<ReactQuill>(null)
 
   const send = () => {
-    const rawHtml = editorRef.current?.innerHTML ?? ''
+    const rawHtml = editorContent
     const plain = noteHtmlToPlainText(rawHtml).trim()
     if (!plain) return
 
@@ -71,10 +74,7 @@ export default function NotesPanel({ onDisplay }: Props) {
 
   const loadRecentEntry = (entry: { heading: string; html: string }) => {
     setHeading(entry.heading)
-    if (editorRef.current) {
-      editorRef.current.innerHTML = entry.html
-      handleInput()
-    }
+    setEditorContent(entry.html)
   }
 
   const removeRecent = (idx: number) => {
@@ -84,6 +84,8 @@ export default function NotesPanel({ onDisplay }: Props) {
       return updated
     })
   }
+
+  const isEmpty = !editorContent.replace(/<[^>]*>/g, '').trim()
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -101,38 +103,17 @@ export default function NotesPanel({ onDisplay }: Props) {
 
         <label className="text-slate-400 text-xs mb-1 block">Text</label>
 
-        {/* Formatting toolbar */}
-        <div className="flex items-center gap-1 mb-1.5">
-          {TOOLBAR_BUTTONS.map((btn) => (
-            <button
-              key={btn.command}
-              title={btn.title}
-              onMouseDown={(e) => { e.preventDefault(); exec(btn.command) }}
-              className="w-8 h-8 flex items-center justify-center bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm rounded transition-colors"
-              style={{
-                fontWeight: btn.command === 'bold' ? 700 : 400,
-                fontStyle: btn.command === 'italic' ? 'italic' : 'normal',
-                textDecoration: btn.command === 'underline' ? 'underline' : 'none',
-              }}
-            >
-              {btn.label}
-            </button>
-          ))}
-          <span className="text-slate-600 text-[10px] ml-2">Select text, then click a style to toggle it</span>
-        </div>
-
-        <div className="relative flex-1">
-          {isEmpty && (
-            <p className="absolute top-2 left-3 text-slate-500 text-sm pointer-events-none leading-relaxed">
-              Type anything you want to show on the projector — announcements, instructions, prayer points, etc. Select text and use the toolbar to make it bold, italic, or underlined.
-            </p>
-          )}
-          <div
-            ref={editorRef}
-            contentEditable
-            suppressContentEditableWarning
-            onInput={handleInput}
-            className="h-full min-h-[12rem] bg-slate-700 border border-slate-600 text-white text-sm px-3 py-2 rounded resize-none focus:outline-none focus:border-indigo-500 leading-relaxed overflow-y-auto"
+        {/* Rich Text Editor */}
+        <div className="flex-1 notes-editor-container">
+          <ReactQuill
+            ref={quillRef}
+            theme="snow"
+            value={editorContent}
+            onChange={setEditorContent}
+            modules={modules}
+            formats={formats}
+            placeholder="Type your announcement, sermon notes, or instructions. Use the toolbar to format text, add alignment, lists, and more..."
+            className="notes-editor"
           />
         </div>
 
@@ -152,7 +133,7 @@ export default function NotesPanel({ onDisplay }: Props) {
           </button>
         </div>
         <p className="text-slate-600 text-xs mt-2">
-          Multi-line text is supported — each line shows on its own row on the projector screen.
+          Rich text formatting with alignment support. The projector will display exactly as you format it.
         </p>
       </div>
 
